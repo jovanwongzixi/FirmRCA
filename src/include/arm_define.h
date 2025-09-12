@@ -14,10 +14,13 @@
 #define ARM_R10 11
 #define ARM_R11 12
 #define ARM_R12 13
+// not sure whether to reorder LR PC SP to correct r13 r14 r15 mapping
 #define ARM_LR 14
 #define ARM_PC 15
 #define ARM_SP 16
-#define ARM_XPSR 17
+// arm32 bit uses CPSR instead of XPSR
+// not used anyway
+#define ARM_CPSR 17
 
 #define MEM_WRITE 17
 #define MEM_READ_AFTER 25

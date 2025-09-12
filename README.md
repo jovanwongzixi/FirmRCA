@@ -111,3 +111,36 @@ If you want to generate more testcases, you can prepare your files like this:
 Then please refer to [fuzzware-fuzzer](https://github.com/fuzzware-fuzzer/fuzzware-emulator) to setup the environment. Please do not clone the their repository in that the unicorn version may be different. Use the fuzzware-emulator in this repository, instead.
 
 Then, run `python dataset.py` to generate your own dataset.
+
+## TODO
+
+Port over ARM CortexM specific implementations to ARM 32bit
+- Set capstone to CS_MODE_ARM instead of CS_MODE_THUMB (DONE)
+- ARM 32bit contains instructions with conditional code (eg. MOVNE), check if need to handle differently
+    - ```c 
+        /// Instruction structure
+        typedef struct cs_arm {
+            bool usermode;	///< User-mode registers to be loaded (for LDM/STM instructions)
+            int vector_size; 	///< Scalar size for vector instructions
+            arm_vectordata_type vector_data; ///< Data type for elements of vector instructions
+            arm_cpsmode_type cps_mode;	///< CPS mode for CPS instruction
+            arm_cpsflag_type cps_flag;	///< CPS mode for CPS instruction
+            ARMCC_CondCodes cc;		///< conditional code for this insn
+            ARMVCC_VPTCodes vcc;	///< Vector conditional code for this instruction.
+            bool update_flags;	///< does this insn update flags?
+            bool post_index;	///< only set if writeback is 'True', if 'False' pre-index, otherwise post.
+            int /* arm_mem_bo_opt */ mem_barrier;	///< Option for some memory barrier instructions
+            // Check ARM_PredBlockMask for encoding details.
+            uint8_t /* ARM_PredBlockMask */ pred_mask;	///< Used by IT/VPT block instructions.
+            /// Number of operands of this instruction,
+            /// or 0 when instruction has no operand.
+            uint8_t op_count;
+
+            cs_arm_op operands[MAX_ARM_OPS];	///< operands for this instruction.
+        } cs_arm;
+    - `cs_arm` struct in capstone has a field to handle cc, not sure if needed to check
+- ARM 32bit instruction contains shift types after ADD, AND, MOV, etc
+    - Need to account for shift values. Can be accessed through op[i].shift.type (eg. ARM_SFT_LSL) and op[i].value (eg. 2)
+    - Modify instruction resolvers affected by shift type to resolve shift values
+    - Find a way to store shift type and shift value
+    - change `get_regval_from_coredump` and `get_memval_from_coredump` in `re_opdvalue.c` 

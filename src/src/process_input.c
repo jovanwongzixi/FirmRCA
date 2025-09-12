@@ -590,7 +590,8 @@ elf_binary_info* parse_binary(const char* bin_path, uint32_t start_address){
 		return NULL;
 	}
 	
-	if (cs_open(CS_ARCH_ARM, CS_MODE_THUMB | CS_MODE_MCLASS, &handle) != CS_ERR_OK){
+	//use arm instead of thumb | M
+	if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &handle) != CS_ERR_OK){
 		LOG(stderr, "ERROR: Failed to initialize engine!\n");
 		return NULL;
 	}
