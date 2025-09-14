@@ -1,5 +1,6 @@
 #include "insthandler_arm.h"
 #include <capstone/capstone.h>
+#include <limits.h>
 
 cs_arm_op* create_arm_opd(){
     cs_arm_op *opd = (cs_arm_op*)malloc(sizeof(cs_arm_op));
@@ -278,6 +279,48 @@ skip:
 	re_resolve(&re_deflist, &re_uselist, &re_instlist);
 }
 #endif
+
+unsigned long calculate_reg_shift(unsigned long initial, arm_shifter sft_type, unsigned int sft_value){
+    // unsigned long should have not difference?
+    if((sft_type == ARM_SFT_ASR) || (sft_type == ARM_SFT_LSR)){
+        return initial >> sft_value;
+    }
+    if(sft_type == ARM_SFT_LSL){
+        return initial << sft_value;
+    }
+    if(sft_type == ARM_SFT_ROR){
+        const int num_bits = sizeof(unsigned long) * CHAR_BIT;
+        sft_value %= num_bits;
+        // Shift right to move bits to the right
+        unsigned long shifted_out_bits = initial >> sft_value;
+
+        // Shift left to get the bits that will wrap around
+        unsigned long wrapped_bits = initial << (num_bits - sft_value);
+
+        // Combine the shifted value with the wrapped bits
+        return shifted_out_bits | wrapped_bits;
+    }
+    if(sft_type == ARM_SFT_RRX){
+        
+    }
+    // TODO: account for reg shifts
+    if(sft_type == ARM_SFT_ASR_REG){
+        
+    }
+    if(sft_type == ARM_SFT_LSL_REG){
+        
+    }
+    if(sft_type == ARM_SFT_LSR_REG){
+        
+    }
+    if(sft_type == ARM_SFT_ROR_REG){
+        
+    }
+    if(sft_type == ARM_SFT_RRX_REG){
+        
+    }
+}
+
 //instruction resolvers
 void invalid_resolver(re_list_t* inst, re_list_t* re_deflist, re_list_t* re_uselist){
     LOG(stdout, "Please fill invalid_resolver \n");
@@ -695,7 +738,14 @@ void add_resolver(re_list_t* inst, re_list_t* re_deflist, re_list_t* re_uselist)
     if (CAST2_DEF(dst[0]->node)->val_stat & AfterKnown &&
         CAST2_USE(src[0]->node)->val_known &&
         !CAST2_USE(src[1]->node)->val_known) {
-            vt.dword = CAST2_DEF(dst[0]->node)->afterval.dword - CAST2_USE(src[0]->node)->val.dword;
+            arm_shifter sft_type = CAST2_USE(src[1]->node)->operand->shift.type;
+            if(sft_type != ARM_SFT_INVALID){
+                unsigned long initial = (CAST2_DEF(dst[0]->node)->afterval.dword - CAST2_USE(src[0]->node)->val.dword);
+                vt.dword = calculate_reg_shift(initial, sft_type, CAST2_USE(src[1]->node)->operand->shift.value);
+            }
+            else{
+                vt.dword = CAST2_DEF(dst[0]->node)->afterval.dword - CAST2_USE(src[0]->node)->val.dword;
+            }
             assign_use_value(src[1], vt);
             add_to_uselist(src[1], re_uselist);
     }

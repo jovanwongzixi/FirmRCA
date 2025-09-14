@@ -1490,7 +1490,9 @@ void vpop_vs_handler(re_list_t *instnode);
 void vpush_vs_handler(re_list_t *instnode);
 #endif
 #endif
-                
+        
+unsigned long calculate_reg_shift(unsigned long initial, arm_shifter sft_type,  unsigned int sft_value);
+
 //instruction resolvers
 void invalid_resolver(re_list_t* inst, re_list_t* re_deflist, re_list_t* re_uselist);
 

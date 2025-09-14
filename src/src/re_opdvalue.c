@@ -119,6 +119,7 @@ unsigned int get_value_from_gen_reg(int reg){
 	if (index == -1) {
 		assert(0);
     	}
+	// coredata->corereg.regs only set when first reading state-out.txt in load_coredump()
 	unsigned int value = re_ds.coredata->corereg.regs[index];
 
 	return value;
