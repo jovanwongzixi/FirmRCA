@@ -144,3 +144,6 @@ Port over ARM CortexM specific implementations to ARM 32bit
     - Modify instruction resolvers affected by shift type to resolve shift values
     - Find a way to store shift type and shift value
     - change `get_regval_from_coredump` and `get_memval_from_coredump` in `re_opdvalue.c` 
+- ARM 32bit instructions may contain post-increment for ldr/str instructions, which ARM-Cortex M does not have
+    - Modify handler/resolver for post increments
+- STM instruction does not seem to correctly increment addresses which define nodes write to
