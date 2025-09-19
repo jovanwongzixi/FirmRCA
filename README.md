@@ -146,4 +146,6 @@ Port over ARM CortexM specific implementations to ARM 32bit
     - change `get_regval_from_coredump` and `get_memval_from_coredump` in `re_opdvalue.c` 
 - ARM 32bit instructions may contain post-increment for ldr/str instructions, which ARM-Cortex M does not have
     - Modify handler/resolver for post increments
+    - `assign_memac_value` in `re_dsmanager.c` resolves for offset operands like `[r0.#4]`, but not `[r0], #4` [Fixed]
 - STM instruction does not seem to correctly increment addresses which define nodes write to
+- strbne (inst index 14) did not parse write address?

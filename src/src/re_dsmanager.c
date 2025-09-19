@@ -1158,9 +1158,12 @@ bool assign_memac_value(re_list_t *unode){
 				enum expreg_status status = get_expreg_status(usenode->operand->mem);
 				if (Base_Reg == status)
 				{
-					// resolve for offset operands like [r0, #4]
+					// resolve for offset operands like [r0, #4] and [r0, #4]!
+					// if post indexing like [r0], #4, r0 value should not be subtracted here 
  					// LOG(stdout, "old val.dword = %#x, disp = %d, scale = %d\n", val.dword, usenode->operand->mem.disp, usenode->operand->mem.scale);
-					val.dword = val.dword - usenode->operand->mem.disp;
+					if(usenode->inst->detail->arm->post_index != true){
+						val.dword = val.dword - usenode->operand->mem.disp;
+					}
 
 				}
 				else if (Base_Index_Reg == status)
@@ -1903,7 +1906,12 @@ re_list_t * find_prev_write_of_address(re_list_t* node, int *type){
 		if (entry->node_type != DefNode || CAST2_DEF(entry->node)->operand->type != ARM_OP_MEM) {
 			continue;
 		}
+		LOG(stdout, "In find_prev_write_of_address: entry ");
+		print_node_operand(entry);
+		LOG(stdout,"\n");
+		printf("%d\n",entry->node_type);
 		address1 = CAST2_DEF(entry->node)->address;
+		LOG(stdout, "address1: %d, address2: %d\n", address1, address2);
 		// LOG(stdout,"temp checker3 flag=%d\n",flag);
 		if (address1 && address2) {
 			diff = address1 > address2 ? address1 - address2 : address2 - address1;
