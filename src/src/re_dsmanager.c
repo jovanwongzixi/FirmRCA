@@ -1103,8 +1103,9 @@ bool assign_memac_value(re_list_t *unode){
 			target_idx = instnode->acnum - (instnode->curac & 0xff);
 			// Some special instructions 
 			if (0 != check_ldst) {
-				if (usenode->operand->reg == instnode->inst->detail->arm.operands[0].reg){
-					// instnode->acnum - 1 is the initial value of src[0]
+				if (usenode->operand->reg == instnode->inst->detail->arm.operands[0].reg && usenode->operand->type==ARM_OP_REG){
+					// instnode->acnum - 1 is the initial value of src[0] for use value of base reg eg. r0 in stm r0!, ...
+					// for operand type ARM_OP_MEM, should assign data value instead of address
 					val.dword = instnode->accesses[instnode->acnum-1]->address; 
 					instnode->curac--; // address usage not effect value usage
 					memac_value = false;
@@ -1161,7 +1162,7 @@ bool assign_memac_value(re_list_t *unode){
 					// resolve for offset operands like [r0, #4] and [r0, #4]!
 					// if post indexing like [r0], #4, r0 value should not be subtracted here 
  					// LOG(stdout, "old val.dword = %#x, disp = %d, scale = %d\n", val.dword, usenode->operand->mem.disp, usenode->operand->mem.scale);
-					if(usenode->inst->detail->arm->post_index != true){
+					if(usenode->inst->detail->arm.post_index != true){
 						val.dword = val.dword - usenode->operand->mem.disp;
 					}
 
@@ -1194,7 +1195,8 @@ bool assign_memac_value(re_list_t *unode){
 			instnode->curac += 0x100;
 			target_idx = instnode->acnum - ((instnode->curac >> 8) & 0xff);
 			if (0 != check_ldst) {
-				if (defnode->operand->reg == instnode->inst->detail->arm.operands[0].reg){
+				// for operand type ARM_OP_MEM, should assign data value instead of address
+				if (defnode->operand->reg == instnode->inst->detail->arm.operands[0].reg && defnode->operand->type == ARM_OP_REG){
 					// 0 is the index of dst[0]
 					val.dword = instnode->accesses[0]->address; 
 					instnode->curac -= 0x100; // address usage not effect value usage
@@ -1906,12 +1908,12 @@ re_list_t * find_prev_write_of_address(re_list_t* node, int *type){
 		if (entry->node_type != DefNode || CAST2_DEF(entry->node)->operand->type != ARM_OP_MEM) {
 			continue;
 		}
-		LOG(stdout, "In find_prev_write_of_address: entry ");
-		print_node_operand(entry);
-		LOG(stdout,"\n");
-		printf("%d\n",entry->node_type);
+		// LOG(stdout, "In find_prev_write_of_address: entry ");
+		// print_node_operand(entry);
+		// LOG(stdout,"\n");
+		// printf("%d\n",entry->node_type);
 		address1 = CAST2_DEF(entry->node)->address;
-		LOG(stdout, "address1: %d, address2: %d\n", address1, address2);
+		// LOG(stdout, "address1: %d, address2: %d\n", address1, address2);
 		// LOG(stdout,"temp checker3 flag=%d\n",flag);
 		if (address1 && address2) {
 			diff = address1 > address2 ? address1 - address2 : address2 - address1;
