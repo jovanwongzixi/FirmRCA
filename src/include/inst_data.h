@@ -30,7 +30,7 @@ typedef struct coredata_struct{
 unsigned long load_trace(elf_binary_info * binary_info, char *trace_file, cs_insn *instlist);
 
 #ifdef MEMAC
-int load_trace_mem(elf_binary_info * binary_info, char *trace_file, size_t* instnum, cs_insn **instlist, struct Access **accesslist);
+int load_trace_mem(binary_collection * bin_collection, char *trace_file, size_t* instnum, cs_insn **instlist, struct Access **accesslist);
 #endif
 
 coredata_t * load_coredump(const char* core_path);

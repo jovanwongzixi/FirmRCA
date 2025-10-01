@@ -41,12 +41,15 @@ int main(int argc, char *argv[]){
 	int result; 
 	int temp_int;
 	unsigned int start_address;
+	char *binary_config_filename;
+	char *sysroot_index_filename;
 
 #ifdef VSA
     size_t lognum, dlregionnum;
     operand_val_t *oploglist;
 #endif
 	elf_binary_info *binary_info;
+	binary_collection* bin_collection;
 	coredata_t * coredata; 
 	cs_insn * rawinstlist;
 #ifndef POMP
@@ -76,13 +79,13 @@ int main(int argc, char *argv[]){
 
 //pre-processing
 	set_core_path(argv[1]); // (state-out.txt)
-	set_bin_path(argv[2]);  // (firmware.bin)
+	set_sysroot_path(argv[2]);  // (sysroot)
 	set_inst_path(argv[3]); // (instlist.reverse)
 	set_memac_path(argv[4]); // (memac.bin)
 
-#ifdef FRCA
-	sscanf(argv[5],"%x",&start_address);
-	sscanf(argv[6],"%d",&temp_int);
+	#ifdef FRCA
+	sysroot_index_filename = argv[5]; //sysroot index file
+	binary_config_filename = argv[6];
 	set_max_rev_ins_num(temp_int);
 	sscanf(argv[7],"%d",&temp_int);
 	set_root_cause_rev_idx(temp_int);
@@ -119,8 +122,8 @@ int main(int argc, char *argv[]){
 	
 
 //parse binaries (*.bin)
-	binary_info = parse_binary(get_bin_path(), start_address); 
-	if (!binary_info) {
+	bin_collection = parse_binaries_from_sysroot(get_sysroot_path(), binary_config_filename); 
+	if (!bin_collection) {
 		LOG(stderr,"ERROR: The binary file is not parsed correctly");
 		exit(1); 
    	} 
@@ -210,5 +213,6 @@ int main(int argc, char *argv[]){
 
 //do some cleanup here
 	destroy_instlist(rawinstlist);
-	destroy_bin_info(binary_info);
+	// destroy_bin_info(binary_info);
+	destroy_bin_collection_info(bin_collection);
 }

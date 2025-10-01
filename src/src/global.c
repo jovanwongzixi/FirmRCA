@@ -10,7 +10,7 @@
 #include "thread_selection.h"
 
 char *core_path;
-char *bin_path; 
+char *sysroot_path; 
 char *inst_path; 
 char *memac_path;
 // elf_core_info *core_info;
@@ -22,8 +22,8 @@ void set_core_path(char *path){
 	core_path = path;
 }
 
-void set_bin_path(char *path){
-    bin_path = path;
+void set_sysroot_path(char *path){
+    sysroot_path = path;
 }
 
 void set_inst_path(char *path){
@@ -46,8 +46,8 @@ char *get_core_path(void){
     return core_path;
 }
 
-char *get_bin_path(void){
-    return bin_path;
+char *get_sysroot_path(void){
+    return sysroot_path;
 }
 
 char *get_inst_path(void){
@@ -85,7 +85,7 @@ elf_binary_info *get_bin_info(void){
 // Load coredump and external library information
 int load_binlib(char *argv[]){
     set_core_path(argv[1]);
-    set_bin_path(argv[2]);
+    set_sysroot_path(argv[2]);
     set_inst_path(argv[3]);
 
     elf_core_info *core_info_local = parse_core(argv[1]); 

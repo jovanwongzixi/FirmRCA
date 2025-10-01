@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <dirent.h>
 #include <errno.h>
 #include "access_memory.h"
 #include "elf_core.h"
@@ -19,6 +20,7 @@
 #include "reverse_log.h"
 #include "global.h"
 
+#define PATH_MAX 512
 #ifdef VSA
 #define REGINFODEM ":"
 #define LOG_MAX_SIZE 256
@@ -288,7 +290,7 @@ coredata_t * load_coredump(const char* core_path){
 }
 
 #ifdef MEMAC
-int load_trace_mem(elf_binary_info * binary_info, char *trace_file, size_t* instnum, cs_insn** instlist, struct Access** accesslist){
+int load_trace_mem(binary_collection * bin_collection, char *trace_file, size_t* instnum, cs_insn** instlist, struct Access** accesslist){
 
     size_t tmpinst, tmpac;
     FILE *file;
@@ -354,7 +356,7 @@ int load_trace_mem(elf_binary_info * binary_info, char *trace_file, size_t* inst
             case TraceEvent_instruction:
                 tmpinst--;
                 read_Instruction(&instruction, event.instruction);
-                instlist_tmp[tmpinst] = binary_info->instlist[binary_info->lookuptable[(instruction.pc - binary_info->start_address)>>1]];
+                instlist_tmp[tmpinst] = *lookup_instruction(bin_collection, instruction.pc);
                 accesslist_tmp[tmpac+tmpinst].pc = instruction.pc; 
                 break;
             case TraceEvent_access:
@@ -508,6 +510,14 @@ int destroy_bin_info(elf_binary_info * bin_info){
 	return 0;
 }
 
+// destroy binary collection structure
+int destroy_bin_collection_info(binary_collection* bin_collection){
+	if(bin_collection != NULL){
+		for(int i; i<bin_collection->count; i++){
+			destroy_bin_info(&bin_collection->binaries[i]);
+		}
+	}
+}
 
 #ifdef VSA
 void destroy_dlregionlist(dlregion_list_t *dlregionlist) {
@@ -553,108 +563,370 @@ int count_bin_file_num(core_nt_file_info nt_file_info){
 	return num; 
 }
 
+// Parse config.yml file to get binary paths and their load addresses
+config_data* parse_config_file(const char* config_path) {
+    FILE* file = fopen(config_path, "r");
+    if (!file) {
+        LOG(stderr, "ERROR: Cannot open config file %s: %s\n", config_path, strerror(errno));
+        return NULL;
+    }
+
+    config_data* config = (config_data*)malloc(sizeof(config_data));
+    if (!config) {
+        fclose(file);
+        return NULL;
+    }
+
+    config->binaries = NULL;
+    config->count = 0;
+    size_t capacity = 0;
+
+    char line[1024];
+    char current_path[PATH_MAX] = {0};
+    uint32_t current_start_address = 0;
+    uint32_t current_end_address = 0;
+    int in_binaries_section = 0;
+    int has_path = 0;
+    int has_start = 0;
+    int has_end = 0;
+
+    while (fgets(line, sizeof(line), file)) {
+        // Trim whitespace
+        char* trimmed = line;
+        while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
+        
+        // Check for binaries section
+        if (strncmp(trimmed, "binaries:", 9) == 0) {
+            in_binaries_section = 1;
+            continue;
+        }
+
+        if (!in_binaries_section) continue;
+
+        // Parse path line (e.g., "  - path: /bin/busybox")
+        if (strstr(trimmed, "- path:") || strstr(trimmed, "path:")) {
+            char* path_start = strchr(trimmed, ':');
+            if (path_start) {
+                path_start++;
+                while (*path_start == ' ' || *path_start == '\t') path_start++;
+                
+                // Remove trailing newline and whitespace
+                char* end = path_start + strlen(path_start) - 1;
+                while (end > path_start && (*end == '\n' || *end == '\r' || *end == ' ')) {
+                    *end = '\0';
+                    end--;
+                }
+                
+                strncpy(current_path, path_start, sizeof(current_path) - 1);
+                has_path = 1;
+            }
+        }
+        // Parse start address line (e.g., "    start_address: 0x10000" or "    start: 0x10000")
+        else if (strstr(trimmed, "start_address:") || strstr(trimmed, "start:")) {
+            char* addr_start = strchr(trimmed, ':');
+            if (addr_start) {
+                addr_start++;
+                current_start_address = (uint32_t)strtoul(addr_start, NULL, 0);
+                has_start = 1;
+            }
+        }
+        // Parse end address line (e.g., "    end_address: 0x20000" or "    end: 0x20000")
+        else if (strstr(trimmed, "end_address:") || strstr(trimmed, "end:")) {
+            char* addr_start = strchr(trimmed, ':');
+            if (addr_start) {
+                addr_start++;
+                current_end_address = (uint32_t)strtoul(addr_start, NULL, 0);
+                has_end = 1;
+            }
+        }
+        
+        // Check if we have all required fields for this entry
+        if (has_path && has_start && has_end) {
+            if (config->count >= capacity) {
+                capacity = (capacity == 0) ? 16 : capacity * 2;
+                config->binaries = (binary_config*)realloc(
+                    config->binaries,
+                    capacity * sizeof(binary_config)
+                );
+                if (!config->binaries) {
+                    LOG(stderr, "ERROR: Failed to allocate config memory\n");
+                    free(config);
+                    fclose(file);
+                    return NULL;
+                }
+            }
+            
+            config->binaries[config->count].binary_path = strdup(current_path);
+            config->binaries[config->count].start_address = current_start_address;
+            config->binaries[config->count].end_address = current_end_address;
+            config->count++;
+            
+            LOG(stdout, "CONFIG: %s -> [0x%x - 0x%x]\n", 
+                current_path, current_start_address, current_end_address);
+            
+            // Reset for next entry
+            current_path[0] = '\0';
+            current_start_address = 0;
+            current_end_address = 0;
+            has_path = 0;
+            has_start = 0;
+            has_end = 0;
+        }
+    }
+
+    fclose(file);
+    
+    if (config->count == 0) {
+        free(config);
+        return NULL;
+    }
+
+    return config;
+}
+
 // parse binary
-elf_binary_info* parse_binary(const char* bin_path, uint32_t start_address){
-	
-	LOG(stdout, "STATE: Process Binary Files Mapped into Address Space\n");
+elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t start_address) {
+    cs_insn* insn;
+    size_t count;
 
-	csh handle;
-	cs_insn* insn;
-	size_t count;
+    FILE* file = fopen(bin_path, "rb");
+    if (file == NULL) {
+        LOG(stderr, "Error When Open ELF file %s: %s\n", bin_path, strerror(errno));
+        return NULL;
+    }
 
-	elf_binary_info * binary_info = NULL;
+    fseek(file, 0, SEEK_END);
+    size_t filesize = ftell(file);
+    fseek(file, 0, SEEK_SET);
 
-	FILE* file = fopen(bin_path, "rb");
+    uint8_t* buffer = (uint8_t*)malloc(filesize);
+    if (buffer == NULL) {
+        LOG(stderr, "Error When Memory Allocation\n");
+        fclose(file);
+        return NULL;
+    }
 
-	if (file == NULL){
-		LOG(stderr, "Error When Open ELF core file: %s\n", strerror(errno));
-		return NULL;
-	}
+    size_t bytes_read = fread(buffer, 1, filesize, file);
+    if (bytes_read != filesize) {
+        LOG(stderr, "Error When Reading ELF file %s: %s\n", bin_path, strerror(errno));
+        fclose(file);
+        free(buffer);
+        return NULL;
+    }
 
-	fseek(file, 0, SEEK_END);
-	size_t filesize = ftell(file);
-	fseek(file, 0, SEEK_SET);
+    elf_binary_info* binary_info = (elf_binary_info*)malloc(sizeof(elf_binary_info));
+    if (binary_info == NULL) {
+        LOG(stderr, "Error When Memory Allocation binary_info\n");
+        cs_close(&handle);
+        fclose(file);
+        free(buffer);
+        return NULL;
+    }
 
-	uint8_t* buffer = (uint8_t*)malloc(filesize);
+    // Initialize the structure
+    memset(binary_info, 0, sizeof(elf_binary_info));
+    binary_info->binary_path = strdup(bin_path);
+    binary_info->start_address = start_address;
 
-	if (buffer == NULL){
-		LOG(stderr, "Error When Memory Allocation\n");
-		fclose(file);
-		return NULL;
-	}
+    count = cs_disasm(handle, buffer, filesize, start_address, 0, &insn);
+    if (count > 0) {
+        LOG(stdout, "DEBUG: Binary %s - %zu instructions\n", bin_path, count);
+        
+        binary_info->instlist = insn;
+        binary_info->inst_count = count;
+        binary_info->lookuptable = (uint32_t*)malloc(count * 2 * sizeof(uint32_t));
+        
+        if (binary_info->lookuptable == NULL) {
+            LOG(stderr, "Error When Memory Allocation lookuptable\n");
+            cs_free(insn, count);
+            free(binary_info->binary_path);
+            free(binary_info);
+            cs_close(&handle);
+            fclose(file);
+            free(buffer);
+            return NULL;
+        }
 
-	size_t bytes_read = fread(buffer, 1, filesize, file);
-	if (bytes_read != filesize){
-		LOG(stderr, "Error When Reading ELF core file: %s\n", strerror(errno));
-		fclose(file);
-		free(buffer);
-		return NULL;
-	}
-	
-	//use arm instead of thumb | M
-	if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &handle) != CS_ERR_OK){
-		LOG(stderr, "ERROR: Failed to initialize engine!\n");
-		return NULL;
-	}
-
-	// use capstone to disasm the binary file
-	cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
-	cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
-
-	binary_info = (elf_binary_info*)malloc(sizeof(elf_binary_info));
-
-	if (binary_info == NULL){
-		LOG(stderr, "Error When Memory Allocation binary_info\n");
-		fclose(file);
-		free(buffer);
-		return NULL;
-	}
-
-	// use capstone to disasm the binary file
-	size_t j;
-	uint32_t offset;
-	count = cs_disasm(handle, buffer, filesize, start_address, 0, &insn);
-	if (count > 0) {
-		LOG(stdout, "DEBUG: The number of instructions is %d\n", count);
-		binary_info->instlist = insn;
-		binary_info->lookuptable = (uint32_t*)malloc(count * 2 * sizeof(uint32_t));
-		for (j = 0; j < count; j++) {
-			if (insn[j].address & 1) {
-				LOG(stderr, "ERROR: instruction address is not aligned\n");
-			}
-			// Bugfix: it seems that capstone will wrongly disassemble some instructions (pop)
+        uint32_t max_address = start_address;
+        for (size_t j = 0; j < count; j++) {
+            if (insn[j].address & 1) {
+                LOG(stderr, "WARNING: instruction address is not aligned at %#x\n", insn[j].address);
+            }
+            
+            // Bugfix: capstone wrongly disassembles some POP instructions
             if (insn[j].id == ARM_INS_POP) {
-                // although sp(r13) read, just ignore it.
-                for (int op_idx = 0; op_idx <= insn[j].detail->arm.op_count; op_idx++) {
-                    // LOG(stdout, "%s %s op[%d](%s) access = %d\n",
-                    // insn[j].mnemonic, insn[j].op_str, op_idx, 
-                    // cs_reg_name(handle, insn[j].detail->arm.operands[op_idx].reg),
-                    // insn[j].detail->arm.operands[op_idx].access);
+                for (int op_idx = 0; op_idx < insn[j].detail->arm.op_count; op_idx++) {
                     if (insn[j].detail->arm.operands[op_idx].access & CS_AC_READ) {
                         insn[j].detail->arm.operands[op_idx].access = CS_AC_WRITE;
                     }
                 }
             }
-			// Bugfix: it seems that capstone will wrongly disassemble negative disp 
-			if (strstr(insn[j].op_str, "#-")) {
-				insn[j].detail->arm.operands[1].mem.disp = -insn[j].detail->arm.operands[1].mem.disp;
-			}
+            
+            // Bugfix: capstone wrongly disassembles negative displacement
+            if (strstr(insn[j].op_str, "#-")) {
+                insn[j].detail->arm.operands[1].mem.disp = -insn[j].detail->arm.operands[1].mem.disp;
+            }
 
-			offset = (insn[j].address - start_address) >> 1; // Trick: instructions are even aligned
-			binary_info->lookuptable[offset] = j;
-			// LOG(stdout,"lookuptable[%d ((%#x - %#x) >> 1)] = %dth instruction in instlist\n", offset, insn[j].address, start_address,j);
-			// usage: binary_info->instlist[binary_info->lookuptable[(address - start_address)>>2]]
-		}
-		// cs_free(insn, count);
-	} else {
-		LOG(stderr, "ERROR: Failed to disassemble given code!\n");
-	}
+            uint32_t offset = (insn[j].address - start_address) >> 1;
+            binary_info->lookuptable[offset] = j;
+            
+            if (insn[j].address > max_address) {
+                max_address = insn[j].address;
+            }
+        }
+        
+    } else {
+        LOG(stderr, "ERROR: Failed to disassemble %s!\n", bin_path);
+        free(binary_info->binary_path);
+        free(binary_info);
+        cs_close(&handle);
+        fclose(file);
+        free(buffer);
+        return NULL;
+    }
 
-	fclose(file);
-	free(buffer);
+    fclose(file);
+    free(buffer);
 
-	binary_info->start_address = start_address;
-	re_ds.handle = handle;
-	return binary_info;
+    return binary_info;
 }
 
+// Main function to parse all binaries in sysroot using config file
+binary_collection* parse_binaries_from_sysroot(const char* sysroot_path, const char* config_path) {
+    LOG(stdout, "STATE: Processing Binaries from Sysroot: %s\n", sysroot_path);
+    LOG(stdout, "STATE: Using config file: %s\n", config_path);
+
+	csh handle;
+
+	if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &handle) != CS_ERR_OK) {
+        LOG(stderr, "ERROR: Failed to initialize capstone engine for %s!\n", bin_path);
+        return NULL;
+    }
+
+    cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
+    cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
+
+    // Parse the config file
+    config_data* config = parse_config_file(config_path);
+    if (!config) {
+        LOG(stderr, "ERROR: Failed to parse config file\n");
+        return NULL;
+    }
+
+    binary_collection* collection = (binary_collection*)malloc(sizeof(binary_collection));
+    if (!collection) {
+        LOG(stderr, "ERROR: Failed to allocate binary collection\n");
+        // Free config
+        for (size_t i = 0; i < config->count; i++) {
+            free(config->binaries[i].binary_path);
+        }
+        free(config->binaries);
+        free(config);
+		cs_close(&handle);
+        return NULL;
+    }
+
+    collection->binaries = NULL;
+    collection->count = 0;
+    collection->capacity = config->count;
+    collection->binaries = (elf_binary_info*)malloc(collection->capacity * sizeof(elf_binary_info));
+    
+    if (!collection->binaries) {
+        LOG(stderr, "ERROR: Failed to allocate binaries array\n");
+        free(collection);
+        for (size_t i = 0; i < config->count; i++) {
+            free(config->binaries[i].binary_path);
+        }
+        free(config->binaries);
+        free(config);
+		cs_close(&handle);
+        return NULL;
+    }
+
+    // Process each binary from the config
+    for (size_t i = 0; i < config->count; i++) {
+        char full_path[PATH_MAX];
+        
+        // Construct full path: sysroot + binary_path
+        // Handle case where binary_path might start with '/'
+        const char* rel_path = config->binaries[i].binary_path;
+        if (rel_path[0] == '/') {
+            rel_path++; // Skip leading slash
+        }
+        snprintf(full_path, sizeof(full_path), "%s/%s", sysroot_path, rel_path);
+
+         LOG(stdout, "Processing: %s at address range [0x%x - 0x%x]\n", 
+            full_path, config->binaries[i].start_address, config->binaries[i].end_address);
+
+        elf_binary_info* bin_info = parse_single_binary(
+			&handle,
+            full_path, 
+            config->binaries[i].start_address
+        );
+        
+        if (bin_info) {
+			bin_info->end_address = config->binaries[i].end_address;
+
+            collection->binaries[collection->count] = *bin_info;
+            collection->count++;
+            free(bin_info); // We copied the contents, free the wrapper
+        } else {
+            LOG(stderr, "WARNING: Failed to parse %s\n", full_path);
+        }
+    }
+
+    // Cleanup config
+    for (size_t i = 0; i < config->count; i++) {
+        free(config->binaries[i].binary_path);
+    }
+    free(config->binaries);
+    free(config);
+
+    LOG(stdout, "STATE: Successfully loaded %zu binaries from sysroot\n", collection->count);
+    
+    if (collection->count == 0) {
+        free(collection->binaries);
+        free(collection);
+        return NULL;
+    }
+
+	re_ds.handle = handle;
+    return collection;
+}
+
+// Multi-range lookup function
+cs_insn* lookup_instruction(binary_collection* collection, uint32_t address) {
+    if (!collection) return NULL;
+
+    // First, find which binary contains this address
+    for (size_t i = 0; i < collection->count; i++) {
+        elf_binary_info* bin = &collection->binaries[i];
+        
+        if (address >= bin->start_address && address < bin->end_address) {
+            // Found the correct binary, now lookup within it
+            uint32_t offset = (address - bin->start_address) >> 1;
+            
+            // Bounds check
+            uint32_t max_offset = ((bin->end_address - bin->start_address) >> 1);
+            if (offset >= max_offset) {
+                LOG(stderr, "WARNING: Offset %u exceeds bounds for binary %s\n", 
+                    offset, bin->binary_path);
+                return NULL;
+            }
+            
+            uint32_t inst_index = bin->lookuptable[offset];
+            
+            if (inst_index >= bin->inst_count) {
+                LOG(stderr, "WARNING: Invalid instruction index %u for address %#x\n", 
+                    inst_index, address);
+                return NULL;
+            }
+            
+            return &bin->instlist[inst_index];
+        }
+    }
+
+    // Address not found in any binary
+    LOG(stderr, "WARNING: Address %#x not found in any loaded binary\n", address);
+    return NULL;
+}
