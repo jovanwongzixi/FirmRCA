@@ -42,7 +42,6 @@ int main(int argc, char *argv[]){
 	int temp_int;
 	unsigned int start_address;
 	char *binary_config_filename;
-	char *sysroot_index_filename;
 
 #ifdef VSA
     size_t lognum, dlregionnum;
@@ -84,8 +83,8 @@ int main(int argc, char *argv[]){
 	set_memac_path(argv[4]); // (memac.bin)
 
 #ifdef FRCA
-	sysroot_index_filename = argv[5]; //sysroot index file
-	binary_config_filename = argv[6];
+	binary_config_filename = argv[5]; //sysroot index file
+	sscanf(argv[6],"%d",&temp_int);
 	set_max_rev_ins_num(temp_int);
 	sscanf(argv[7],"%d",&temp_int);
 	set_root_cause_rev_idx(temp_int);
@@ -130,7 +129,7 @@ int main(int argc, char *argv[]){
 
 #ifdef MEMAC
 
-	if (load_trace_mem(binary_info, get_memac_path(), &instnum, &rawinstlist, &accesslist) != 0) {
+	if (load_trace_mem(bin_collection, get_memac_path(), &instnum, &rawinstlist, &accesslist) != 0) {
 		LOG(stderr, "ERROR: error in loading all the instructions\n");
 		assert(0);
 	}
