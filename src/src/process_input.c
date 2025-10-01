@@ -213,7 +213,7 @@ coredata_t * load_coredump(const char* core_path){
     char line[512];
 	const char* reg_names[] = {
 		"zero","r0","r1","r2","r3","r4","r5","r6","r7",
-		"r8","r9","r10","r11","r12","lr","pc","sp","xpsr"
+		"r8","r9","r10","r11","r12","lr","pc","sp","cpsr"
 	};
 
     while (fgets(line, sizeof(line), file)) {
@@ -360,6 +360,7 @@ int load_trace_mem(elf_binary_info * binary_info, char *trace_file, size_t* inst
             case TraceEvent_access:
                 tmpac--;
                 read_Access(&accesslist_tmp[tmpac+tmpinst], event.access);
+				// LOG(stdout, "[load_trace_mem]: Read Access %d\n", tmpac);
                 break;
         }
     }
