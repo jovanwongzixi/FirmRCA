@@ -717,18 +717,17 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
     elf_binary_info* binary_info = (elf_binary_info*)malloc(sizeof(elf_binary_info));
     if (binary_info == NULL) {
         LOG(stderr, "Error When Memory Allocation binary_info\n");
-        cs_close(&handle);
+        cs_close(handle);
         fclose(file);
         free(buffer);
         return NULL;
     }
-
     // Initialize the structure
     memset(binary_info, 0, sizeof(elf_binary_info));
     binary_info->binary_path = strdup(bin_path);
     binary_info->start_address = start_address;
-
-    count = cs_disasm(handle, buffer, filesize, start_address, 0, &insn);
+	
+    count = cs_disasm(*handle, buffer, filesize, start_address, 0, &insn);
     if (count > 0) {
         LOG(stdout, "DEBUG: Binary %s - %zu instructions\n", bin_path, count);
         
@@ -741,13 +740,12 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
             cs_free(insn, count);
             free(binary_info->binary_path);
             free(binary_info);
-            cs_close(&handle);
+            cs_close(handle);
             fclose(file);
             free(buffer);
             return NULL;
         }
 
-        uint32_t max_address = start_address;
         for (size_t j = 0; j < count; j++) {
             if (insn[j].address & 1) {
                 LOG(stderr, "WARNING: instruction address is not aligned at %#x\n", insn[j].address);
@@ -769,17 +767,14 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
 
             uint32_t offset = (insn[j].address - start_address) >> 1;
             binary_info->lookuptable[offset] = j;
-            
-            if (insn[j].address > max_address) {
-                max_address = insn[j].address;
-            }
+
         }
         
     } else {
         LOG(stderr, "ERROR: Failed to disassemble %s!\n", bin_path);
         free(binary_info->binary_path);
         free(binary_info);
-        cs_close(&handle);
+        cs_close(handle);
         fclose(file);
         free(buffer);
         return NULL;
@@ -799,7 +794,7 @@ binary_collection* parse_binaries_from_sysroot(const char* sysroot_path, const c
 	csh handle;
 
 	if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &handle) != CS_ERR_OK) {
-        LOG(stderr, "ERROR: Failed to initialize capstone engine for %s!\n", bin_path);
+        LOG(stderr, "ERROR: Failed to initialize capstone engine for %s!\n", sysroot_path);
         return NULL;
     }
 
