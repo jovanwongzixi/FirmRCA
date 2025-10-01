@@ -83,7 +83,7 @@ int main(int argc, char *argv[]){
 	set_inst_path(argv[3]); // (instlist.reverse)
 	set_memac_path(argv[4]); // (memac.bin)
 
-	#ifdef FRCA
+#ifdef FRCA
 	sysroot_index_filename = argv[5]; //sysroot index file
 	binary_config_filename = argv[6];
 	set_max_rev_ins_num(temp_int);

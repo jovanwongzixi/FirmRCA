@@ -51,7 +51,7 @@ typedef struct config_data_struct {
 
 elf_binary_info *parse_binary(const char* filename, uint32_t start_address);
 
-binary_collection* parse_binaries_from_sysroot(const char* sysroot_path, const char* config_path) {
+binary_collection* parse_binaries_from_sysroot(const char* sysroot_path, const char* config_path);
 
 int destroy_bin_info(elf_binary_info *bin_info);
 
