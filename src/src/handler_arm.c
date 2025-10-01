@@ -739,13 +739,13 @@ void add_resolver(re_list_t* inst, re_list_t* re_deflist, re_list_t* re_uselist)
         CAST2_USE(src[0]->node)->val_known &&
         !CAST2_USE(src[1]->node)->val_known) {
             arm_shifter sft_type = CAST2_USE(src[1]->node)->operand->shift.type;
-            if(sft_type != ARM_SFT_INVALID){
-                unsigned long initial = (CAST2_DEF(dst[0]->node)->afterval.dword - CAST2_USE(src[0]->node)->val.dword);
-                vt.dword = calculate_reg_shift(initial, sft_type, CAST2_USE(src[1]->node)->operand->shift.value);
-            }
-            else{
-                vt.dword = CAST2_DEF(dst[0]->node)->afterval.dword - CAST2_USE(src[0]->node)->val.dword;
-            }
+            // if(sft_type != ARM_SFT_INVALID){
+            //     unsigned long initial = (CAST2_DEF(dst[0]->node)->afterval.dword - CAST2_USE(src[0]->node)->val.dword);
+            //     vt.dword = calculate_reg_shift(initial, sft_type, CAST2_USE(src[1]->node)->operand->shift.value);
+            // }
+            // else{
+            vt.dword = CAST2_DEF(dst[0]->node)->afterval.dword - CAST2_USE(src[0]->node)->val.dword;
+            // }
             assign_use_value(src[1], vt);
             add_to_uselist(src[1], re_uselist);
     }
