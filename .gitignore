@@ -23,3 +23,4 @@ ablation2
 ablation3
 *.pdf
 toy_example
+src/autogen.sh

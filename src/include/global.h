@@ -18,6 +18,8 @@ char * get_core_path(void);
 
 void set_bin_path(char *path);
 char * get_bin_path(void);
+void set_sysroot_path(char *path);
+char * get_sysroot_path(void);
 
 void set_inst_path(char *path);
 char * get_inst_path(void);

@@ -125,12 +125,13 @@ def run_single_rca(target,exp_env,line):
     for item in config:
         if target and item['name'] == target:
             test_dir = os.path.join('./testsuites',item['name'])
-            binary_file = os.path.join(test_dir, 'firmware.bin')
+            sysroot_dir = os.path.join(test_dir, 'sysroot')
             core_dump = os.path.join(test_dir, 'state-out.txt')
             inv_trace_file = os.path.join(test_dir, 'instlist.reverse')
             inv_loglist_file = os.path.join(test_dir, 'loglist.reverse')
             memac_file = os.path.join(test_dir, 'memac.bin')
             start_addr = item['bin_load_addr']
+            binary_config_path = os.path.join(test_dir, 'context_index.yml')
             instlist_lines = get_file_lines(inv_trace_file)
             if line <= 1:
                 nline = int(instlist_lines * line)
@@ -146,9 +147,9 @@ def run_single_rca(target,exp_env,line):
             else:
                 output_log = os.path.join(test_dir, f'execution-{exp_env}-{nline}.log')
             if 'deepvsa' in exp_env:
-                run_exp_command = f'{test_env[exp_env]["env"]} {test_env[exp_env]["program"]} {core_dump} {binary_file} {inv_trace_file} {memac_file} {inv_loglist_file} {start_addr} {max_rev_ins_num} {root_cause_rev_idx} > {output_log}'
+                run_exp_command = f'{test_env[exp_env]["env"]} {test_env[exp_env]["program"]} {core_dump} {sysroot_dir} {inv_trace_file} {memac_file} {inv_loglist_file} {start_addr} {max_rev_ins_num} {root_cause_rev_idx} > {output_log}'
             else:
-                run_exp_command = f'{test_env[exp_env]["env"]} {test_env[exp_env]["program"]} {core_dump} {binary_file} {inv_trace_file} {memac_file} {start_addr} {max_rev_ins_num} {root_cause_rev_idx} > {output_log}'
+                run_exp_command = f'{test_env[exp_env]["env"]} {test_env[exp_env]["program"]} {core_dump} {sysroot_dir} {inv_trace_file} {memac_file} {binary_config_path} {max_rev_ins_num} {root_cause_rev_idx} > {output_log}'
             try:
                 p = Process(target=do_execute, args=(run_exp_command, sem))
                 p.start()
@@ -315,7 +316,7 @@ def exp_repeat_test_overhead_lastN(target,settings,sub_dir):
 
 
 def debug():
-    run_single_rca('contiki-ng-54','capnproto-log',1)
+    run_single_rca('llama.cpp','capnproto-log',1)
 
 
 if __name__ == '__main__':

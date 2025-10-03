@@ -727,6 +727,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
     binary_info->binary_path = strdup(bin_path);
     binary_info->start_address = start_address;
 	
+    // TODO: need to toggle between thumb mode and non thumb mode
     count = cs_disasm(*handle, buffer, filesize, start_address, 0, &insn);
     if (count > 0) {
         LOG(stdout, "DEBUG: Binary %s - %zu instructions\n", bin_path, count);
@@ -734,7 +735,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
         binary_info->instlist = insn;
         binary_info->inst_count = count;
         binary_info->lookuptable = (uint32_t*)malloc(count * 2 * sizeof(uint32_t));
-        
+        memset(binary_info->lookuptable, 0xFFFFFFFF, count * 2 * sizeof(uint32_t));
         if (binary_info->lookuptable == NULL) {
             LOG(stderr, "Error When Memory Allocation lookuptable\n");
             cs_free(insn, count);
@@ -766,6 +767,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
             }
 
             uint32_t offset = (insn[j].address - start_address) >> 1;
+            // LOG(stdout, "Instruction %d has address %#x and offset %#x\n", j, insn[j].address, offset);
             binary_info->lookuptable[offset] = j;
 
         }
@@ -912,6 +914,7 @@ cs_insn* lookup_instruction(binary_collection* collection, uint32_t address) {
             uint32_t inst_index = bin->lookuptable[offset];
             
             if (inst_index >= bin->inst_count) {
+                // LOG(stderr, "Address %#x has offset value of 0x%#x and index of %u and retrieved inst has address\n", address, offset, inst_index);
                 LOG(stderr, "WARNING: Invalid instruction index %u for address %#x\n", 
                     inst_index, address);
                 return NULL;
