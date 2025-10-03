@@ -780,6 +780,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
     bool is_thumb;
 
     size_t i, cur_binary_idx;
+    uint32_t cur_addr, addr_offset;
 
     FILE* file = fopen(bin_path, "rb");
     if (file == NULL) {
@@ -797,7 +798,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
         fclose(file);
         return NULL;
     }
-    uint8_t* cur_buffer_ptr = buffer;
+    // uint8_t* cur_buffer_ptr = buffer;
 
     size_t bytes_read = fread(buffer, 1, filesize, file);
     if (bytes_read != filesize) {
@@ -870,7 +871,9 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
         // offset = (addr - start_addr) >> 1
         // addr = offset << 1 + start_addr
         // LOG(stdout, "Disassembling inst at address %#x\n", i<<1 + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
-        count = cs_disasm(*handle, cur_buffer_ptr, 4, (uint32_t)((i<<1)&0xFFFFFFFF) + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address, 1, &insn);
+        addr_offset = (uint32_t)((i<<1)&0xFFFFFFFF);
+        cur_addr =  addr_offset + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address;
+        count = cs_disasm(*handle, buffer+addr_offset, 4, cur_addr, 1, &insn);
         
         // if reach this path, means trying to disassemble instruction that was executed. If zero, means error in disasm
         if(count == 0){
@@ -906,13 +909,13 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
         // i is effectively the offset of the instruction since we are iterating through the is_thumb arr which contains a index for all possible instructions
         binary_info->lookuptable[i] = instlist_idx;
         instlist_idx++;
-        if(is_thumb){
-            // thumb instructions are 2 bytes
-            cur_buffer_ptr += 2;
-        }
-        else{
-            cur_buffer_ptr += 4;
-        }
+        // if(is_thumb){
+        //     // thumb instructions are 2 bytes
+        //     cur_buffer_ptr += 2;
+        // }
+        // else{
+        //     cur_buffer_ptr += 4;
+        // }
 
     }
 
