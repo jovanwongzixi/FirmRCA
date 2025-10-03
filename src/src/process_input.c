@@ -155,6 +155,7 @@ unsigned long count_linenum(char * filename){
 	return linenum;
 }
 #endif
+config_data* parse_config_file(const char* config_path);
 
 unsigned long countvalidaddress(char *filename){
     char line[80];
@@ -289,6 +290,90 @@ coredata_t * load_coredump(const char* core_path){
 	return coredata;
 }
 
+void parse_binaries_for_thumb_insts(binary_insts_is_thumb **binary_insts_is_thumb_arr, size_t *binary_insts_is_thumb_arr_len, const char* config_path, const char* sysroot_path, char *trace_file){
+    LOG(stdout, "DEBUG: Parsing binaries for thumb insts\n");
+    
+    unsigned long max_num_inst;
+    binary_insts_is_thumb *binary_insts_is_thumb_arr_tmp;
+
+    FILE *file;
+    struct capn ctx;
+    TraceEvent_ptr pevent;
+    struct TraceEvent event;
+    struct Instruction instruction;
+
+    size_t i, inst_binary_idx;
+    uint32_t inst_offset;
+
+    config_data* config = parse_config_file(config_path);
+    
+    binary_insts_is_thumb_arr_tmp = (binary_insts_is_thumb*)malloc(config->count * sizeof(binary_insts_is_thumb));
+    *binary_insts_is_thumb_arr_len = config->count;
+    if (!binary_insts_is_thumb_arr_tmp){
+        LOG(stderr, "ERROR: Failed to allocate memory for binary_insts_is_thumb_arr_tmp\n");
+        return;
+    }
+
+    for(i=0; i<*binary_insts_is_thumb_arr_len; i++){
+        // instructions are even aligned, so maximum number of possible instructions is divided by 2
+        max_num_inst = (config->binaries[i].end_address - config->binaries[i].start_address) >> 1;
+
+        binary_insts_is_thumb_arr_tmp[i].arr_len = max_num_inst;
+
+        // allocate array of max possible num of inst, value at each offset indicates if instruction is thumb or not
+        binary_insts_is_thumb_arr_tmp[i].is_thumb_arr = (uint8_t *)malloc(max_num_inst * sizeof(uint8_t));
+        if(!binary_insts_is_thumb_arr_tmp[i].is_thumb_arr){
+            LOG(stderr, "ERROR: Failed to allocate memory for binary_insts_is_thumb_arr_tmp[i].is_thumb_arr\n");
+            free(binary_insts_is_thumb_arr_tmp);
+            return;
+        }
+        LOG(stdout, "DEBUG: Allocated memory for binary_insts_is_thumb_arr_tmp[%u].is_thumb_arr\n", i);
+        // pre-initialise values to 0xFF, if value remains as 0xFF means instruction at that address is not used
+        memset(binary_insts_is_thumb_arr_tmp[i].is_thumb_arr, 0xFF, max_num_inst * sizeof(uint8_t));
+        binary_insts_is_thumb_arr_tmp[i].binary_start_address = config->binaries[i].start_address;
+    }
+    
+    // parse memac.bin file
+    // count the number of executed instructions
+    if ((file = fopen(trace_file, "rb" )) == NULL){
+        LOG(stderr, "ERROR: trace file open error\n");
+        return -1;
+    }
+
+    while (0==capn_init_fp(&ctx, file, 0)) {
+
+        pevent.p = capn_getp(capn_root(&ctx), 0, 0);
+        read_TraceEvent(&event, pevent);
+
+        if(event.which == TraceEvent_instruction){
+            read_Instruction(&instruction, event.instruction);
+
+            // find corresponding array to write is thumb value
+            for(i=0; i<*binary_insts_is_thumb_arr_len; i++){
+                // compare instruction pc with start and end addresses
+                // LOG(stdout, "Start address for %d is %#x, end address is %#x\n", i, config->binaries[i].start_address, config->binaries[i].end_address);
+                // inst in binary addr range
+                if((instruction.pc >= config->binaries[i].start_address) && (instruction.pc < config->binaries[i].end_address)){
+                    inst_binary_idx = i;
+                    break;
+                }
+            }
+
+            inst_offset = (instruction.pc - config->binaries[inst_binary_idx].start_address) >> 1;
+            // if(instruction.pc == 0x40816b54){
+            //     LOG(stdout, "DEBUG: Instruction %#x has offset %#x with start address %#x and bin idx of %d\n", instruction.pc, inst_offset, config->binaries[inst_binary_idx].start_address, inst_binary_idx);
+            // }
+            // write is thumb value: 1 for Thumb, 0 for non thumb
+            binary_insts_is_thumb_arr_tmp[inst_binary_idx].is_thumb_arr[inst_offset] = instruction.isThumb;
+        }
+    }
+
+    *binary_insts_is_thumb_arr = binary_insts_is_thumb_arr_tmp;
+
+	fclose(file);
+
+}
+
 #ifdef MEMAC
 int load_trace_mem(binary_collection * bin_collection, char *trace_file, size_t* instnum, cs_insn** instlist, struct Access** accesslist){
 
@@ -311,6 +396,8 @@ int load_trace_mem(binary_collection * bin_collection, char *trace_file, size_t*
 
     tmpinst = 0; 	
     tmpac = 0;
+
+    fseek(file, 0, SEEK_SET);
 
     while (0==capn_init_fp(&ctx, file, 0)) {
         pevent.p = capn_getp(capn_root(&ctx), 0, 0);
@@ -590,6 +677,8 @@ config_data* parse_config_file(const char* config_path) {
     int has_start = 0;
     int has_end = 0;
 
+    fseek(file, 0, SEEK_SET);
+
     while (fgets(line, sizeof(line), file)) {
         // Trim whitespace
         char* trimmed = line;
@@ -685,9 +774,12 @@ config_data* parse_config_file(const char* config_path) {
 }
 
 // parse binary
-elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t start_address) {
+elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t start_address, binary_insts_is_thumb *binary_insts_is_thumb_arr, size_t binary_insts_is_thumb_arr_len) {
     cs_insn* insn;
     size_t count;
+    bool is_thumb;
+
+    size_t i, cur_binary_idx;
 
     FILE* file = fopen(bin_path, "rb");
     if (file == NULL) {
@@ -705,6 +797,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
         fclose(file);
         return NULL;
     }
+    uint8_t* cur_buffer_ptr = buffer;
 
     size_t bytes_read = fread(buffer, 1, filesize, file);
     if (bytes_read != filesize) {
@@ -726,19 +819,62 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
     memset(binary_info, 0, sizeof(elf_binary_info));
     binary_info->binary_path = strdup(bin_path);
     binary_info->start_address = start_address;
-	
+    // find binary idx of current binary in binary_insts_is_thumb_arr
+    for(i=0; i<binary_insts_is_thumb_arr_len; i++){
+        // LOG(stdout, "Finding idx of current binary\n");
+        if(start_address == binary_insts_is_thumb_arr[i].binary_start_address){
+            LOG(stdout, "Found idx of current binary %d\n", i);
+            cur_binary_idx = i;
+            break;
+        }
+    }
+    
+    size_t instlist_len = binary_insts_is_thumb_arr[cur_binary_idx].arr_len;
+
+    // need to separate instlist_idx from subsequent i value as some values of i may not contain instruction that we want to analyse
+    size_t instlist_idx = 0;
+
+    // allocate memory for instlist based on max possible number of instructions, although should usually need less than that
+    binary_info->instlist = (cs_insn *)malloc(instlist_len * sizeof(cs_insn));
+    binary_info->inst_count = 0;
+    
+    binary_info->lookuptable = (uint32_t*)malloc(binary_insts_is_thumb_arr[cur_binary_idx].arr_len * sizeof(uint32_t));
+
+    // TODO: handle failed mallocs
+    if(!binary_info->instlist || !binary_info->lookuptable){
+        LOG(stderr, "ERROR: Failed to allocated memory for binary_info->instlist/binary_info->lookuptable\n");
+        return NULL;
+    }
+
+    // initialise with oversized value so program will crash if attempted to look for instruction at an address which wasn't executed 
+    memset(binary_info->lookuptable, 0xFFFFFFFF, binary_insts_is_thumb_arr[cur_binary_idx].arr_len * sizeof(uint32_t));
+    // LOG(stdout, "memset binary_info->lookuptable succeded\n");
+
+    LOG(stdout, "binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address: %#x\n", binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
     // TODO: need to toggle between thumb mode and non thumb mode
-    count = cs_disasm(*handle, buffer, filesize, start_address, 0, &insn);
-    if (count > 0) {
-        LOG(stdout, "DEBUG: Binary %s - %zu instructions\n", bin_path, count);
+    for(i=0; i<binary_insts_is_thumb_arr[cur_binary_idx].arr_len; i++){
+        if(binary_insts_is_thumb_arr[cur_binary_idx].is_thumb_arr[i] == 0x1){
+            cs_option(*handle, CS_OPT_MODE, CS_MODE_THUMB);
+            is_thumb = true;
+        }
+        else if(binary_insts_is_thumb_arr[cur_binary_idx].is_thumb_arr[i] == 0){
+            cs_option(*handle, CS_OPT_MODE, CS_MODE_ARM);
+            is_thumb = false;
+        }
+        else{
+            // instruction not executed, don't need to disasm
+            continue;
+        }
+
+        // disasm one instruction at a time
+        // offset = (addr - start_addr) >> 1
+        // addr = offset << 1 + start_addr
+        // LOG(stdout, "Disassembling inst at address %#x\n", i<<1 + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
+        count = cs_disasm(*handle, cur_buffer_ptr, 4, (uint32_t)((i<<1)&0xFFFFFFFF) + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address, 1, &insn);
         
-        binary_info->instlist = insn;
-        binary_info->inst_count = count;
-        binary_info->lookuptable = (uint32_t*)malloc(count * 2 * sizeof(uint32_t));
-        memset(binary_info->lookuptable, 0xFFFFFFFF, count * 2 * sizeof(uint32_t));
-        if (binary_info->lookuptable == NULL) {
-            LOG(stderr, "Error When Memory Allocation lookuptable\n");
-            cs_free(insn, count);
+        // if reach this path, means trying to disassemble instruction that was executed. If zero, means error in disasm
+        if(count == 0){
+            LOG(stderr, "ERROR: Failed to disassemble %s at current buffer ptr %#x for instruction at address %#x!\n", bin_path, cur_buffer_ptr, i<<1 + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
             free(binary_info->binary_path);
             free(binary_info);
             cs_close(handle);
@@ -747,40 +883,92 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
             return NULL;
         }
 
-        for (size_t j = 0; j < count; j++) {
-            if (insn[j].address & 1) {
-                LOG(stderr, "WARNING: instruction address is not aligned at %#x\n", insn[j].address);
-            }
-            
-            // Bugfix: capstone wrongly disassembles some POP instructions
-            if (insn[j].id == ARM_INS_POP) {
-                for (int op_idx = 0; op_idx < insn[j].detail->arm.op_count; op_idx++) {
-                    if (insn[j].detail->arm.operands[op_idx].access & CS_AC_READ) {
-                        insn[j].detail->arm.operands[op_idx].access = CS_AC_WRITE;
-                    }
+        if(insn->address & 1){
+            LOG(stderr, "WARNING: instruction address is not aligned at %#x\n", insn->address);
+        }
+
+        if (insn->id == ARM_INS_POP) {
+            for (int op_idx = 0; op_idx < insn->detail->arm.op_count; op_idx++) {
+                if (insn->detail->arm.operands[op_idx].access & CS_AC_READ) {
+                    insn->detail->arm.operands[op_idx].access = CS_AC_WRITE;
                 }
             }
-            
-            // Bugfix: capstone wrongly disassembles negative displacement
-            if (strstr(insn[j].op_str, "#-")) {
-                insn[j].detail->arm.operands[1].mem.disp = -insn[j].detail->arm.operands[1].mem.disp;
-            }
-
-            uint32_t offset = (insn[j].address - start_address) >> 1;
-            // LOG(stdout, "Instruction %d has address %#x and offset %#x\n", j, insn[j].address, offset);
-            binary_info->lookuptable[offset] = j;
-
         }
-        
-    } else {
-        LOG(stderr, "ERROR: Failed to disassemble %s!\n", bin_path);
-        free(binary_info->binary_path);
-        free(binary_info);
-        cs_close(handle);
-        fclose(file);
-        free(buffer);
-        return NULL;
+
+        // Bugfix: capstone wrongly disassembles negative displacement
+        if (strstr(insn->op_str, "#-")) {
+            insn->detail->arm.operands[1].mem.disp = -insn->detail->arm.operands[1].mem.disp;
+        }
+
+        LOG(stdout, "Instruction %d has address %#x and offset %#x with start address %#x\n", instlist_idx, (uint32_t)((i<<1)&0xFFFFFFFF) + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address, i, binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
+        memcpy(&binary_info->instlist[instlist_idx], insn, sizeof(cs_insn));
+        binary_info->inst_count++;
+        // i is effectively the offset of the instruction since we are iterating through the is_thumb arr which contains a index for all possible instructions
+        binary_info->lookuptable[i] = instlist_idx;
+        instlist_idx++;
+        if(is_thumb){
+            // thumb instructions are 2 bytes
+            cur_buffer_ptr += 2;
+        }
+        else{
+            cur_buffer_ptr += 4;
+        }
+
     }
+
+    // count = cs_disasm(*handle, buffer, filesize, start_address, 0, &insn);
+    // if (count > 0) {
+    //     LOG(stdout, "DEBUG: Binary %s - %zu instructions\n", bin_path, count);
+        
+    //     binary_info->instlist = insn;
+    //     binary_info->inst_count = count;
+    //     binary_info->lookuptable = (uint32_t*)malloc(count * 2 * sizeof(uint32_t));
+    //     memset(binary_info->lookuptable, 0xFFFFFFFF, count * 2 * sizeof(uint32_t));
+    //     if (binary_info->lookuptable == NULL) {
+    //         LOG(stderr, "Error When Memory Allocation lookuptable\n");
+    //         cs_free(insn, count);
+    //         free(binary_info->binary_path);
+    //         free(binary_info);
+    //         cs_close(handle);
+    //         fclose(file);
+    //         free(buffer);
+    //         return NULL;
+    //     }
+
+    //     for (size_t j = 0; j < count; j++) {
+    //         if (insn[j].address & 1) {
+    //             LOG(stderr, "WARNING: instruction address is not aligned at %#x\n", insn[j].address);
+    //         }
+            
+    //         // Bugfix: capstone wrongly disassembles some POP instructions
+    //         if (insn[j].id == ARM_INS_POP) {
+    //             for (int op_idx = 0; op_idx < insn[j].detail->arm.op_count; op_idx++) {
+    //                 if (insn[j].detail->arm.operands[op_idx].access & CS_AC_READ) {
+    //                     insn[j].detail->arm.operands[op_idx].access = CS_AC_WRITE;
+    //                 }
+    //             }
+    //         }
+            
+    //         // Bugfix: capstone wrongly disassembles negative displacement
+    //         if (strstr(insn[j].op_str, "#-")) {
+    //             insn[j].detail->arm.operands[1].mem.disp = -insn[j].detail->arm.operands[1].mem.disp;
+    //         }
+
+    //         uint32_t offset = (insn[j].address - start_address) >> 1;
+    //         // LOG(stdout, "Instruction %d has address %#x and offset %#x\n", j, insn[j].address, offset);
+    //         binary_info->lookuptable[offset] = j;
+
+    //     }
+        
+    // } else {
+    //     LOG(stderr, "ERROR: Failed to disassemble %s!\n", bin_path);
+    //     free(binary_info->binary_path);
+    //     free(binary_info);
+    //     cs_close(handle);
+    //     fclose(file);
+    //     free(buffer);
+    //     return NULL;
+    // }
 
     fclose(file);
     free(buffer);
@@ -789,7 +977,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
 }
 
 // Main function to parse all binaries in sysroot using config file
-binary_collection* parse_binaries_from_sysroot(const char* sysroot_path, const char* config_path) {
+binary_collection* parse_binaries_from_sysroot(binary_insts_is_thumb *binary_insts_is_thumb_arr, size_t binary_insts_is_thumb_arr_len, const char* sysroot_path, const char* config_path) {
     LOG(stdout, "STATE: Processing Binaries from Sysroot: %s\n", sysroot_path);
     LOG(stdout, "STATE: Using config file: %s\n", config_path);
 
@@ -858,7 +1046,9 @@ binary_collection* parse_binaries_from_sysroot(const char* sysroot_path, const c
         elf_binary_info* bin_info = parse_single_binary(
 			&handle,
             full_path, 
-            config->binaries[i].start_address
+            config->binaries[i].start_address,
+            binary_insts_is_thumb_arr,
+            binary_insts_is_thumb_arr_len
         );
         
         if (bin_info) {

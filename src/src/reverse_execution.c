@@ -43,6 +43,10 @@ int main(int argc, char *argv[]){
 	unsigned int start_address;
 	char *binary_config_filename;
 
+	// if ARM Mode
+	binary_insts_is_thumb *binary_insts_is_thumb_arr;
+	size_t binary_insts_is_thumb_arr_len;
+
 #ifdef VSA
     size_t lognum, dlregionnum;
     operand_val_t *oploglist;
@@ -119,9 +123,12 @@ int main(int argc, char *argv[]){
 		exit(1); 
 	}
 	
+	// check binaries for thumb insts
+	// insert func here
+	parse_binaries_for_thumb_insts(&binary_insts_is_thumb_arr, &binary_insts_is_thumb_arr_len, binary_config_filename, get_sysroot_path(), get_memac_path());
 
 //parse binaries (*.bin)
-	bin_collection = parse_binaries_from_sysroot(get_sysroot_path(), binary_config_filename); 
+	bin_collection = parse_binaries_from_sysroot(binary_insts_is_thumb_arr, binary_insts_is_thumb_arr_len, get_sysroot_path(), binary_config_filename); 
 	if (!bin_collection) {
 		LOG(stderr,"ERROR: The binary file is not parsed correctly");
 		exit(1); 
