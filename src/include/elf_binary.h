@@ -49,9 +49,17 @@ typedef struct config_data_struct {
     size_t count;
 } config_data;
 
+typedef struct binary_insts_is_thumb_struct{
+    uint8_t* is_thumb_arr;
+    size_t arr_len;
+    uint32_t binary_start_address;
+} binary_insts_is_thumb;
+
+void parse_binaries_for_thumb_insts(binary_insts_is_thumb **binary_insts_is_thumb_arr, size_t *binary_insts_is_thumb_arr_len, const char* config_path, const char* sysroot_path, char *trace_file);
+
 elf_binary_info *parse_binary(const char* filename, uint32_t start_address);
 
-binary_collection* parse_binaries_from_sysroot(const char* sysroot_path, const char* config_path);
+binary_collection* parse_binaries_from_sysroot(binary_insts_is_thumb *binary_insts_is_thumb_arr, size_t binary_insts_is_thumb_arr_len, const char* sysroot_path, const char* config_path);
 
 int destroy_bin_info(elf_binary_info *bin_info);
 
