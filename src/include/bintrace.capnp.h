@@ -84,13 +84,14 @@ static const size_t Crash_struct_bytes_count = 16;
 struct Instruction {
 	uint32_t pc;
 	uint32_t lr;
+	uint8_t isThumb;
 };
 
-static const size_t Instruction_word_count = 1;
+static const size_t Instruction_word_count = 2;
 
 static const size_t Instruction_pointer_count = 0;
 
-static const size_t Instruction_struct_bytes_count = 8;
+static const size_t Instruction_struct_bytes_count = 16;
 
 
 struct Access {
@@ -99,7 +100,7 @@ struct Access {
 	uint8_t size;
 	uint32_t pc;
 	uint32_t address;
-	uint32_t value;
+	uint64_t value;
 };
 
 static const size_t Access_word_count = 3;

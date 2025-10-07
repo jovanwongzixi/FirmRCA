@@ -107,12 +107,12 @@ void set_Crash(const struct Crash *s, Crash_list l, int i) {
 
 Instruction_ptr new_Instruction(struct capn_segment *s) {
 	Instruction_ptr p;
-	p.p = capn_new_struct(s, 8, 0);
+	p.p = capn_new_struct(s, 16, 0);
 	return p;
 }
 Instruction_list new_Instruction_list(struct capn_segment *s, int len) {
 	Instruction_list p;
-	p.p = capn_new_list(s, len, 8, 0);
+	p.p = capn_new_list(s, len, 16, 0);
 	return p;
 }
 void read_Instruction(struct Instruction *s capnp_unused, Instruction_ptr p) {
@@ -120,12 +120,14 @@ void read_Instruction(struct Instruction *s capnp_unused, Instruction_ptr p) {
 	capnp_use(s);
 	s->pc = capn_read32(p.p, 0);
 	s->lr = capn_read32(p.p, 4);
+	s->isThumb = capn_read8(p.p, 8);
 }
 void write_Instruction(const struct Instruction *s capnp_unused, Instruction_ptr p) {
 	capn_resolve(&p.p);
 	capnp_use(s);
 	capn_write32(p.p, 0, s->pc);
 	capn_write32(p.p, 4, s->lr);
+	capn_write8(p.p, 8, s->isThumb);
 }
 void get_Instruction(struct Instruction *s, Instruction_list l, int i) {
 	Instruction_ptr p;
@@ -156,7 +158,7 @@ void read_Access(struct Access *s capnp_unused, Access_ptr p) {
 	s->size = capn_read8(p.p, 2);
 	s->pc = capn_read32(p.p, 8);
 	s->address = capn_read32(p.p, 12);
-	s->value = capn_read32(p.p, 16);
+	s->value = capn_read64(p.p, 16);
 }
 void write_Access(const struct Access *s capnp_unused, Access_ptr p) {
 	capn_resolve(&p.p);
@@ -166,7 +168,7 @@ void write_Access(const struct Access *s capnp_unused, Access_ptr p) {
 	capn_write8(p.p, 2, s->size);
 	capn_write32(p.p, 8, s->pc);
 	capn_write32(p.p, 12, s->address);
-	capn_write32(p.p, 16, s->value);
+	capn_write64(p.p, 16, s->value);
 }
 void get_Access(struct Access *s, Access_list l, int i) {
 	Access_ptr p;
