@@ -327,7 +327,7 @@ void parse_binaries_for_thumb_insts(binary_insts_is_thumb **binary_insts_is_thum
             free(binary_insts_is_thumb_arr_tmp);
             return;
         }
-        LOG(stdout, "DEBUG: Allocated memory for binary_insts_is_thumb_arr_tmp[%u].is_thumb_arr\n", i);
+        // LOG(stdout, "DEBUG: Allocated memory for binary_insts_is_thumb_arr_tmp[%u].is_thumb_arr\n", i);
         // pre-initialise values to 0xFF, if value remains as 0xFF means instruction at that address is not used
         memset(binary_insts_is_thumb_arr_tmp[i].is_thumb_arr, 0xFF, max_num_inst * sizeof(uint8_t));
         binary_insts_is_thumb_arr_tmp[i].binary_start_address = config->binaries[i].start_address;
@@ -877,7 +877,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
         
         // if reach this path, means trying to disassemble instruction that was executed. If zero, means error in disasm
         if(count == 0){
-            LOG(stderr, "ERROR: Failed to disassemble %s at current buffer ptr %#x for instruction at address %#x!\n", bin_path, cur_buffer_ptr, i<<1 + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
+            LOG(stderr, "ERROR: Failed to disassemble %s at current buffer ptr %#lx for instruction at address %#x!\n", bin_path, cur_addr, i<<1 + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
             free(binary_info->binary_path);
             free(binary_info);
             cs_close(handle);
@@ -887,7 +887,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
         }
 
         if(insn->address & 1){
-            LOG(stderr, "WARNING: instruction address is not aligned at %#x\n", insn->address);
+            LOG(stderr, "WARNING: instruction address is not aligned at %#lx\n", insn->address);
         }
 
         if (insn->id == ARM_INS_POP) {
@@ -903,7 +903,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
             insn->detail->arm.operands[1].mem.disp = -insn->detail->arm.operands[1].mem.disp;
         }
 
-        LOG(stdout, "Instruction %d has address %#x and offset %#x with start address %#x\n", instlist_idx, (uint32_t)((i<<1)&0xFFFFFFFF) + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address, i, binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
+        // LOG(stdout, "Instruction %lx has address %#x and offset %#lx with start address %#x\n", instlist_idx, (uint32_t)((i<<1)&0xFFFFFFFF) + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address, i, binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
         memcpy(&binary_info->instlist[instlist_idx], insn, sizeof(cs_insn));
         binary_info->inst_count++;
         // i is effectively the offset of the instruction since we are iterating through the is_thumb arr which contains a index for all possible instructions
