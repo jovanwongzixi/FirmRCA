@@ -17,7 +17,7 @@ typedef struct memseg_struct{
 }memseg_t; 
 
 typedef struct corereg_struct{
-	int32_t regs[18];
+	uint64_t regs[51];
 }corereg_t;
 
 

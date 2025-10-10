@@ -28,7 +28,7 @@ void print_memac(re_list_t *instnode){
     for (int i = 0; i < node->acnum; i++) {
         access = node->accesses[i];
         assert(access->type == MEM_READ_AFTER || access->type == MEM_WRITE);
-        LOG(stdout, "%s %d bytes ( %#x ) at %#x, pc = %#x\n",
+        LOG(stdout, "%s %d bytes ( %#lx ) at %#x, pc = %#x\n",
             access->type == MEM_READ_AFTER ? "Read" : "Write",
             access->size, access->value, access->address, access->pc);
     }
@@ -117,22 +117,22 @@ void print_node_operand(re_list_t* node) {
 
 // print all the registers for one instruction
 void print_registers(coredata_t *coredata){
-    LOG(stdout, "DEBUG: r0 - 0x%x\n", coredata->corereg.regs[ARM_R0]);
-    LOG(stdout, "DEBUG: r1 - 0x%x\n", coredata->corereg.regs[ARM_R1]);
-    LOG(stdout, "DEBUG: r2 - 0x%x\n", coredata->corereg.regs[ARM_R2]);
-    LOG(stdout, "DEBUG: r3 - 0x%x\n", coredata->corereg.regs[ARM_R3]);
-    LOG(stdout, "DEBUG: r4 - 0x%x\n", coredata->corereg.regs[ARM_R4]);
-    LOG(stdout, "DEBUG: r5 - 0x%x\n", coredata->corereg.regs[ARM_R5]);
-    LOG(stdout, "DEBUG: r6 - 0x%x\n", coredata->corereg.regs[ARM_R6]);
-    LOG(stdout, "DEBUG: r7 - 0x%x\n", coredata->corereg.regs[ARM_R7]);
-    LOG(stdout, "DEBUG: r8 - 0x%x\n", coredata->corereg.regs[ARM_R8]);
-    LOG(stdout, "DEBUG: r9 - 0x%x\n", coredata->corereg.regs[ARM_R9]);
-    LOG(stdout, "DEBUG: r10 - 0x%x\n", coredata->corereg.regs[ARM_R10]);
-    LOG(stdout, "DEBUG: r11 - 0x%x\n", coredata->corereg.regs[ARM_R11]);
-    LOG(stdout, "DEBUG: r12 - 0x%x\n", coredata->corereg.regs[ARM_R12]);
-    LOG(stdout, "DEBUG: lr - 0x%x\n", coredata->corereg.regs[ARM_LR]);
-    LOG(stdout, "DEBUG: pc - 0x%x\n", coredata->corereg.regs[ARM_PC]);
-    LOG(stdout, "DEBUG: sp - 0x%x\n", coredata->corereg.regs[ARM_SP]);
+    LOG(stdout, "DEBUG: r0 - 0x%lx\n", coredata->corereg.regs[ARM_R0]);
+    LOG(stdout, "DEBUG: r1 - 0x%lx\n", coredata->corereg.regs[ARM_R1]);
+    LOG(stdout, "DEBUG: r2 - 0x%lx\n", coredata->corereg.regs[ARM_R2]);
+    LOG(stdout, "DEBUG: r3 - 0x%lx\n", coredata->corereg.regs[ARM_R3]);
+    LOG(stdout, "DEBUG: r4 - 0x%lx\n", coredata->corereg.regs[ARM_R4]);
+    LOG(stdout, "DEBUG: r5 - 0x%lx\n", coredata->corereg.regs[ARM_R5]);
+    LOG(stdout, "DEBUG: r6 - 0x%lx\n", coredata->corereg.regs[ARM_R6]);
+    LOG(stdout, "DEBUG: r7 - 0x%lx\n", coredata->corereg.regs[ARM_R7]);
+    LOG(stdout, "DEBUG: r8 - 0x%lx\n", coredata->corereg.regs[ARM_R8]);
+    LOG(stdout, "DEBUG: r9 - 0x%lx\n", coredata->corereg.regs[ARM_R9]);
+    LOG(stdout, "DEBUG: r10 - 0x%lx\n", coredata->corereg.regs[ARM_R10]);
+    LOG(stdout, "DEBUG: r11 - 0x%lx\n", coredata->corereg.regs[ARM_R11]);
+    LOG(stdout, "DEBUG: r12 - 0x%lx\n", coredata->corereg.regs[ARM_R12]);
+    LOG(stdout, "DEBUG: lr - 0x%lx\n", coredata->corereg.regs[ARM_LR]);
+    LOG(stdout, "DEBUG: pc - 0x%lx\n", coredata->corereg.regs[ARM_PC]);
+    LOG(stdout, "DEBUG: sp - 0x%lx\n", coredata->corereg.regs[ARM_SP]);
     LOG(stdout, "\n");
 }
 
@@ -191,11 +191,11 @@ void print_value_of_node(valset_u val, arm_datatype datatype) {
 			LOG(stdout, "%#x -> 0x%x (word)",val.dword, val.word);
 			break;
 		case op_dword:
-			LOG(stdout, "0x%lx (dword)", val.dword);
+			LOG(stdout, "0x%x (dword)", val.dword);
 			break;
 		case op_qword:
-			LOG(stdout, "0x%lx 0x%lx (qword)",
-				val.qword[0], val.qword[1]);
+			LOG(stdout, "0x%lx (qword)",
+				val.qword);
 			break;
 		// case op_dqword:
 		// 	LOG(stdout, "0x%lx 0x%lx 0x%lx 0x%lx (dqword)",

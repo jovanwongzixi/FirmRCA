@@ -256,6 +256,8 @@ size_t set_taint_sink(int* index, int* base) {
 		case ARM_INS_STRB:
 		case ARM_INS_STRH:
 		case ARM_INS_STRD:
+		case ARM_INS_VLDR:
+		case ARM_INS_VSTR:
 			*index = re_ds.root->detail->arm.operands[1].mem.index;
 			*base = re_ds.root->detail->arm.operands[1].mem.base;
 			break;
@@ -269,6 +271,13 @@ size_t set_taint_sink(int* index, int* base) {
         case ARM_INS_LDMIB:
             // *index = re_ds.root->detail->arm.operands[0].reg;
 			*base = re_ds.root->detail->arm.operands[0].reg;
+			break;
+		// multiple load store for vectors
+		case ARM_INS_VLD1:
+		case ARM_INS_VST1:
+			uint8_t last_idx = re_ds.root->detail->arm.op_count-1;
+			*index = re_ds.root->detail->arm.operands[last_idx].mem.index;
+			*base = re_ds.root->detail->arm.operands[last_idx].mem.base;
 			break;
 		// for instruction illegal fetch
 		case ARM_INS_BLX:
@@ -297,14 +306,41 @@ size_t set_taint_sink(int* index, int* base) {
 }
 
 #ifdef FRCA
+// TODO: can rename this
 bool absolute_address_data(inst_node_t* read_node, inst_node_t* write_node){
 	// Check whether reads and writes use exactly the same address and data
 	for (int ri = 0; ri < read_node->acnum; ri++) {
 		for (int wi = 0; wi < write_node->acnum; wi++) {
+			uint8_t read_sz, write_sz;
+			read_sz = read_node->accesses[ri]->size;
+			write_sz = write_node->accesses[wi]->size;
+			// EXACT
 			if (read_node->accesses[ri]->address == write_node->accesses[wi]->address &&
+				read_sz == write_sz &&
 				read_node->accesses[ri]->value == write_node->accesses[wi]->value) {
 				return true;
 			}
+
+			// only accounting for start and end scenarios
+			// SUB (read node is same address as write node)
+			if (read_node->accesses[ri]->address == write_node->accesses[wi]->address &&
+				read_node->accesses[ri]->address+read_sz < write_node->accesses[wi]->address+write_sz) {
+				// assume little endian and clear out upper bits?
+				if(read_node->accesses[ri]->value == (write_node->accesses[wi]->value & (UINT64_MAX >> ((write_sz-read_sz)<<3)))){
+					return true;
+				}
+			}
+
+			// SUB (read node is greater address than write node)
+			if (read_node->accesses[ri]->address > write_node->accesses[wi]->address &&
+				read_node->accesses[ri]->address+read_sz == write_node->accesses[wi]->address+write_sz) {
+				// assume little endian and clear out lower bits?
+				if(read_node->accesses[ri]->value == write_node->accesses[wi]->value >> ((write_sz-read_sz)<<3)){
+					return true;
+				}
+			}
+
+			// yet to handle OVERLAP and SUPER
 		}
 	}
 	return false;

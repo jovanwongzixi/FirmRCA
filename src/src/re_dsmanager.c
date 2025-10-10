@@ -24,6 +24,8 @@ re_list_t * find_next_use_of_def(re_list_t *def, int *type) __attribute__ ((alia
 
 re_list_t * find_prev_use_of_def(re_list_t *def, int *type) __attribute__ ((alias("find_prev_use_of_use")));
 
+int check_vector_ldst(cs_insn *inst);
+
 
 unsigned maxfuncid(void){
 
@@ -785,7 +787,7 @@ re_list_t * add_new_use(cs_arm_op * opd, enum u_type type, cs_insn* insn){
 	// note : PC is a special case, no need to add in the use-def chain
 	if(type == Base && opd->type == ARM_OP_MEM && opd->mem.base == ARM_REG_PC){
 		newuse->val_known = true;
-		newuse->val.dword = insn->address + insn->size;
+		newuse->val.dword = insn->address & 0xFFFFFFFFF + insn->size;
 		return newnode; 
 	}
 
@@ -1014,7 +1016,7 @@ void assign_def_before_value(re_list_t * def, valset_u val){
 	
 	CAST2_DEF(def->node)->val_stat |= BeforeKnown;  
 #ifdef VERBOSE
-	LOG(stdout, "assign_def_before_value %#lx to [", val.dword);
+	LOG(stdout, "assign_def_before_value %#x to [", val.dword);
 	print_operand((CAST2_DEF(def->node)->operand));
 	LOG(stdout, "], def node id %d\n", def->id);
 #endif
@@ -1032,7 +1034,7 @@ void assign_def_after_value(re_list_t * def, valset_u val){
 
 	CAST2_DEF(def->node)->val_stat |= AfterKnown; 
 #ifdef VERBOSE
-	LOG(stdout, "assign_def_after_value %#lx to [", val.dword);
+	LOG(stdout, "assign_def_after_value %#x to [", val.dword);
 	print_operand((CAST2_DEF(def->node)->operand)); 
 	LOG(stdout, "], def node id %d\n", def->id);
 #endif
@@ -1049,7 +1051,13 @@ void assign_use_value(re_list_t *use, valset_u val) {
 
 	CAST2_USE(use->node)->val_known = true;  
 #ifdef VERBOSE
-	LOG(stdout, "assign_use_value %#lx to [", val.dword);
+	int check_vector = check_vector_ldst(CAST2_USE(use->node)->inst);
+	if(check_vector != 0){
+		LOG(stdout, "assign_use_value %#lx to [", val.qword);
+	}
+	else{
+		LOG(stdout, "assign_use_value %#x to [", val.dword);
+	}
 	print_node_operand(use); 
 	LOG(stdout, "], use node id %d\n", use->id);
 #endif
@@ -1061,7 +1069,7 @@ void assign_use_value(re_list_t *use, valset_u val) {
 }
 
 #ifdef FRCA
-bool check_multiple_ldst(cs_insn *inst) {
+int check_multiple_ldst(cs_insn *inst) {
 	if (inst->id == ARM_INS_LDM || inst->id == ARM_INS_STM) {
 		return 1; // IA mode
 	} else if (inst->id == ARM_INS_LDMDB || inst->id == ARM_INS_STMDB) {
@@ -1069,6 +1077,18 @@ bool check_multiple_ldst(cs_insn *inst) {
 	}
 	return 0;
 }
+
+// check for vst1.8 and vstr together?
+int check_vector_ldst(cs_insn *inst){
+	if (inst->id == ARM_INS_VSTR || inst->id == ARM_INS_VLDR){
+		return 1;
+	}
+	if (inst->id == ARM_INS_VST1 || inst->id == ARM_INS_VLD1){
+		return 2;
+	}
+	return 0;
+}
+
 bool assign_memac_value(re_list_t *unode){
 	re_list_t* re_node;
 	inst_node_t* instnode;
@@ -1077,6 +1097,8 @@ bool assign_memac_value(re_list_t *unode){
 	bool memac_value = true;
 	bool do_assign = true;
 	int check_ldst;
+	int check_vector;
+
 	if (unode->node_type == InstNode){
 		return false;
 	}
@@ -1096,11 +1118,39 @@ bool assign_memac_value(re_list_t *unode){
 		return false;
 	}
 	check_ldst = check_multiple_ldst(instnode->inst);
+
+	check_vector = check_vector_ldst(instnode->inst);
+
 	if (unode->node_type == UseNode) {
 		use_node_t* usenode = CAST2_USE(unode->node);
 		if (Opd == usenode->usetype){ // Apply to the whole operand
 			instnode->curac++;
 			target_idx = instnode->acnum - (instnode->curac & 0xff);
+
+			if(check_vector != 0){
+				if(memac_value){
+					val.qword = instnode->accesses[target_idx]->value;
+				}
+				
+				if (usenode->address){
+					if(usenode->address != instnode->accesses[target_idx]->address) {
+						LOG(stdout,"ERROR!!!!! usenode->address (%#x) != instnode->accesses[0]->address (%#x)\n",
+							usenode->address, instnode->accesses[target_idx]->address);
+					}
+				}
+				usenode->address = instnode->accesses[target_idx]->address;
+				if (usenode->val_known) {
+					if (usenode->val.qword != val.qword) {
+						LOG(stdout,"ERROR!!!!! usenode->val.qword (%#lx) != val.qword (%#lx)\n",
+							usenode->val.qword, val.qword);
+					}
+				} else {
+					assign_use_value(unode, val);
+					return true;
+				}
+				return false;
+			}
+
 			// Some special instructions 
 			if (0 != check_ldst) {
 				if (usenode->operand->reg == instnode->inst->detail->arm.operands[0].reg && usenode->operand->type==ARM_OP_REG){
@@ -1120,7 +1170,7 @@ bool assign_memac_value(re_list_t *unode){
 			// 	}
 			// }
 			if (memac_value) {
-				val.dword = instnode->accesses[target_idx]->value;
+				val.dword = instnode->accesses[target_idx]->value & 0xFFFFFFFF;
 			}
 
 			if (usenode->address){
@@ -1132,7 +1182,7 @@ bool assign_memac_value(re_list_t *unode){
 			usenode->address = instnode->accesses[target_idx]->address;
 			if (usenode->val_known) {
 				if (usenode->val.dword != val.dword) {
-					LOG(stdout,"ERROR!!!!! usenode->val.dword (%#lx) != val.dword (%#lx)\n",
+					LOG(stdout,"ERROR!!!!! usenode->val.dword (%#x) != val.dword (%#x)\n",
 						usenode->val.dword, val.dword);
 				}
 			} else {
@@ -1174,7 +1224,7 @@ bool assign_memac_value(re_list_t *unode){
 				}
 				if (usenode->val_known) {
 					if (usenode->val.dword != val.dword) {
-						LOG(stdout,"ERROR!!!!! usenode->val.dword (%#lx) != val.dword (%#lx)\n",
+						LOG(stdout,"ERROR!!!!! usenode->val.dword (%#x) != val.dword (%#x)\n",
 							usenode->val.dword, val.dword);
 						}
 				} else {
@@ -1214,7 +1264,7 @@ bool assign_memac_value(re_list_t *unode){
 
 			// memcpy(&val, &instnode->accesses[target_idx]->value, sizeof(val));
 			if (memac_value) {
-				val.dword = instnode->accesses[target_idx]->value;
+				val.dword = instnode->accesses[target_idx]->value & 0xFFFFFFFF;
 			}
 			if (defnode->address){
 				if(defnode->address != instnode->accesses[target_idx]->address) {
@@ -1915,18 +1965,21 @@ re_list_t * find_prev_write_of_address(re_list_t* node, int *type){
 		address1 = CAST2_DEF(entry->node)->address;
 		// LOG(stdout, "address1: %d, address2: %d\n", address1, address2);
 		// LOG(stdout,"temp checker3 flag=%d\n",flag);
-		if (address1 && address2) {
-			diff = address1 > address2 ? address1 - address2 : address2 - address1;
-			if (diff == 0){
-				*type = EXACT;
-			} 
-			// else if (diff < 4){
-			// 	*type = OVERLAP;
-			// }
-			else {
-				*type = 0;
-			}
-		}
+
+		// use compare two targets instead?
+		*type = compare_two_targets(entry, node);
+		// if (address1 && address2) {
+		// 	diff = address1 > address2 ? address1 - address2 : address2 - address1;
+		// 	if (diff == 0){
+		// 		*type = EXACT;
+		// 	} 
+		// 	// else if (diff < 4){
+		// 	// 	*type = OVERLAP;
+		// 	// }
+		// 	else {
+		// 		*type = 0;
+		// 	}
+		// }
 		
 #ifdef VERBOSE
 		switch(*type){
@@ -2413,7 +2466,7 @@ void resolve_define(re_list_t *re_deflist, re_list_t *re_uselist, re_list_t *re_
 //assign to the next use
 nextuse:
 		nextuse = find_next_use_of_def(entry, &type);
-
+		LOG(stdout, "Found next use of def with type %d\n", type);
 		if(!nextuse)
 			goto prevdef; 
 	

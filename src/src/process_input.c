@@ -216,7 +216,12 @@ coredata_t * load_coredump(const char* core_path){
     char line[512];
 	const char* reg_names[] = {
 		"zero","r0","r1","r2","r3","r4","r5","r6","r7",
-		"r8","r9","r10","r11","r12","lr","pc","sp","cpsr"
+		"r8","r9","r10","r11","r12","lr","pc","sp","cpsr","","",
+        "d1","d2","d3","d4","d5","d6","d7","d8","d9","d10",
+        "d11","d12","d13","d14","d15","d16","d17","d18","d19","d20",
+        "d21","d22","d23","d24","d25","d26","d27","d28","d29","d30",
+        "d31"
+
 	};
 
     while (fgets(line, sizeof(line), file)) {
@@ -277,9 +282,13 @@ coredata_t * load_coredump(const char* core_path){
             }
         }
 		else {
-			for (int i = 0; i < 18; i++) {
+			for (int i = 0; i < 51; i++) {
+                // not assigned any register
+                if(i==18 || i==19){
+                    continue;
+                }
 				if (strncmp(line, reg_names[i], strlen(reg_names[i])) == 0) {
-					sscanf(line + strlen(reg_names[i]) + 1, "%x", &coredata->corereg.regs[i]);
+					sscanf(line + strlen(reg_names[i]) + 1, "%lx", &coredata->corereg.regs[i]);
 					break;
 				}
 			}
@@ -824,7 +833,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
     for(i=0; i<binary_insts_is_thumb_arr_len; i++){
         // LOG(stdout, "Finding idx of current binary\n");
         if(start_address == binary_insts_is_thumb_arr[i].binary_start_address){
-            LOG(stdout, "Found idx of current binary %d\n", i);
+            LOG(stdout, "Found idx of current binary %u\n", i);
             cur_binary_idx = i;
             break;
         }
@@ -877,7 +886,7 @@ elf_binary_info* parse_single_binary(csh *handle, const char* bin_path, uint32_t
         
         // if reach this path, means trying to disassemble instruction that was executed. If zero, means error in disasm
         if(count == 0){
-            LOG(stderr, "ERROR: Failed to disassemble %s at current buffer ptr %#lx for instruction at address %#x!\n", bin_path, cur_addr, i<<1 + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
+            LOG(stderr, "ERROR: Failed to disassemble %s at current buffer ptr %#x for instruction at address %#x!\n", bin_path, cur_addr, i<<1 + binary_insts_is_thumb_arr[cur_binary_idx].binary_start_address);
             free(binary_info->binary_path);
             free(binary_info);
             cs_close(handle);

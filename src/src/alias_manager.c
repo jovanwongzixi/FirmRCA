@@ -25,13 +25,13 @@ bool assert_val(re_list_t* node, valset_u vt, bool before){
 	LOG(stdout, "alias_manager.c/assert_val: node value [");
 	print_node_operand(node);
 	if (node->node_type == UseNode){
-		LOG(stdout," ( %#lx ) ]", ((use_node_t *)node->node)->val.dword );
+		LOG(stdout," ( %#x ) ]", ((use_node_t *)node->node)->val.dword );
 	} else if (before) {
-		LOG(stdout," ( %#lx ) ]", ((def_node_t *)node->node)->beforeval.dword );
+		LOG(stdout," ( %#x ) ]", ((def_node_t *)node->node)->beforeval.dword );
 	} else {
-		LOG(stdout," ( %#lx ) ]", ((def_node_t *)node->node)->afterval.dword );
+		LOG(stdout," ( %#x ) ]", ((def_node_t *)node->node)->afterval.dword );
 	}
-	LOG(stdout, " v.s. valset value [ %#lx ]\n",vt.dword);
+	LOG(stdout, " v.s. valset value [ %#x ]\n",vt.dword);
 #endif
 	if(node->node_type == UseNode){
 
@@ -83,9 +83,9 @@ bool assert_val(re_list_t* node, valset_u vt, bool before){
 				break;
 						
 			case op_qword:
-				if (memcmp(use->val.qword, vt.qword, 2*sizeof(long))) {
+				if (use->val.qword != vt.qword) {
 					LOG(stdout, "!!!!!!!!!!!!!!!!!!!!!\n");
-					LOG(stdout, "LOG: conflict at dqword\n");
+					LOG(stdout, "LOG: conflict at qword\n");
 
 					assert(re_ds.rec_count);
 				assert(0);
@@ -150,7 +150,7 @@ bool assert_val(re_list_t* node, valset_u vt, bool before){
 				break;
 				
 			case op_qword:
-				if(memcmp((void*)vd.qword, (void*)vt.qword, sizeof(vd.qword))){
+				if(vd.qword == vt.qword){
 
 					LOG(stdout, "!!!!!!!!!!!!!!!!!!!!!\n");
                                         LOG(stdout, "LOG: conflict at qword\n");

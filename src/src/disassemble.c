@@ -33,6 +33,7 @@ mem_access_type check_mem_access(cs_insn* insn) {
 	case ARM_INS_LDREXB:
 	case ARM_INS_LDREXH:
 	case ARM_INS_LDREXD:
+	case ARM_INS_VLDR:
 		return mem_read;
 	
 	case ARM_INS_STR:
@@ -43,6 +44,7 @@ mem_access_type check_mem_access(cs_insn* insn) {
 	case ARM_INS_STREXB:
 	case ARM_INS_STREXH:
 	case ARM_INS_STREXD:
+	case ARM_INS_VSTR:
 		return mem_write;
 	default:
 		return mem_none;
@@ -241,6 +243,9 @@ arm_datatype arm_get_datatype(cs_insn* insn) {
 		case ARM_INS_STRH:
 		case ARM_INS_LDRH:
 			return op_word;
+		case ARM_INS_VSTR:
+		case ARM_INS_VLDR:
+			return op_qword;
 		default:
 			return op_dword;
 	}

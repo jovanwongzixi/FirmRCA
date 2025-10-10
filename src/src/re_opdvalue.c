@@ -107,42 +107,96 @@ int get_index_from_arm_reg_t(unsigned int reg) {
 		return 15;
 	case ARM_REG_SP:
 		return 16;
+
+	// map original value of D registers 20 - 51 with its own value
+	case ARM_REG_D0:
+	case ARM_REG_D1:
+	case ARM_REG_D2:
+	case ARM_REG_D3:
+	case ARM_REG_D4:
+	case ARM_REG_D5:
+	case ARM_REG_D6:
+	case ARM_REG_D7:
+	case ARM_REG_D8:
+	case ARM_REG_D9:
+	case ARM_REG_D10:
+	case ARM_REG_D11:
+	case ARM_REG_D12:
+	case ARM_REG_D13:
+	case ARM_REG_D14:
+	case ARM_REG_D15:
+	case ARM_REG_D16:
+	case ARM_REG_D17:
+	case ARM_REG_D18:
+	case ARM_REG_D19:
+	case ARM_REG_D20:
+	case ARM_REG_D21:
+	case ARM_REG_D22:
+	case ARM_REG_D23:
+	case ARM_REG_D24:
+	case ARM_REG_D25:
+	case ARM_REG_D26:
+	case ARM_REG_D27:
+	case ARM_REG_D28:
+	case ARM_REG_D29:
+	case ARM_REG_D30:
+	case ARM_REG_D31:
+		return reg;
 	default:
 		return -1;
 		break;
 	}
 }
-// get the value of register from x86_reg_t
-unsigned int get_value_from_gen_reg(int reg){
+// get the value of register from arm_reg_t
+uint64_t get_value_from_gen_reg(int reg){
 
 	int index = get_index_from_arm_reg_t(reg);
 	if (index == -1) {
 		assert(0);
     	}
 	// coredata->corereg.regs only set when first reading state-out.txt in load_coredump()
-	unsigned int value = re_ds.coredata->corereg.regs[index];
+	uint64_t value = re_ds.coredata->corereg.regs[index];
 
 	return value;
 }
 
 
 int get_regval_from_coredump(int reg, valset_u *value, cs_insn* inst){
-	unsigned int gen_value = get_value_from_gen_reg(reg);
+	uint64_t gen_value = get_value_from_gen_reg(reg);
 	switch (arm_get_datatype(inst)) {
 		case op_byte:
-			value->byte = gen_value & 0x000000ff;
+			value->byte = gen_value & 0x00000000000000ff;
+#ifdef VERBOSE
+			LOG(stdout, "re_opdvalue/get_regval_from_coredump: get %d bytes from %s : %#x\n",
+			arm_get_datatype(inst), cs_reg_name(re_ds.handle, reg),value->byte);
+#endif
 			break;
 		case op_word:
-			value->word = gen_value & 0x0000ffff;
+			value->word = gen_value & 0x000000000000ffff;
+#ifdef VERBOSE
+			LOG(stdout, "re_opdvalue/get_regval_from_coredump: get %d bytes from %s : %#x\n",
+			arm_get_datatype(inst), cs_reg_name(re_ds.handle, reg),value->word);
+#endif
 			break;
 		case op_dword:
-			value->dword = gen_value;
+			value->dword = gen_value & 0x00000000ffffffff;
+#ifdef VERBOSE
+			LOG(stdout, "re_opdvalue/get_regval_from_coredump: get %d bytes from %s : %#x\n",
+			arm_get_datatype(inst), cs_reg_name(re_ds.handle, reg),value->dword);
+#endif
+			break;
+		case op_qword:
+			value->qword = gen_value;
+	#ifdef VERBOSE
+				LOG(stdout, "re_opdvalue/get_regval_from_coredump: get %d bytes from %s : %#lx\n",
+				arm_get_datatype(inst), cs_reg_name(re_ds.handle, reg),value->qword);
+	#endif
 			break;
 	}
-#ifdef VERBOSE
-	LOG(stdout, "re_opdvalue/get_regval_from_coredump: get %d bytes from %s : %#x\n",
-	arm_get_datatype(inst), cs_reg_name(re_ds.handle, reg),value->dword);
-#endif
+// #ifdef VERBOSE
+// 	LOG(stdout, "re_opdvalue/get_regval_from_coredump: get %d bytes from %s : %#x\n",
+// 	arm_get_datatype(inst), cs_reg_name(re_ds.handle, reg),value->dword);
+// #endif
 	return GET_VALUE_OK;
 
 	// if ((reg.type&reg_gen)||(reg.type&reg_sp)||(reg.type&reg_fp)||(reg.type&reg_pc)) {
@@ -226,16 +280,31 @@ int get_memval_from_coredump(re_list_t *entry, valset_u *value) {
 		LOG(stdout, "LOG: Error when reading address %#x\n", address);
 		return BAD_ADDRESS;
 	} 
-#ifdef VERBOSE
-	LOG(stdout, "re_opdvalue/get_memval_from_coredump: get %d bytes from memory ( %#x ), value is %#x\n",
-	datatype, address, (*((unsigned int *)p)));
-#endif
+
 	if (datatype == op_byte) {
 		value->byte = (*((unsigned char *)p));
+#ifdef VERBOSE
+		LOG(stdout, "re_opdvalue/get_memval_from_coredump: get %d bytes from memory ( %#x ), value is %#x\n",
+		datatype, address, (*((unsigned char *)p)));
+#endif
 	} else if (datatype == op_word) {
 		value->word = (*((unsigned short *)p));
+#ifdef VERBOSE
+		LOG(stdout, "re_opdvalue/get_memval_from_coredump: get %d bytes from memory ( %#x ), value is %#x\n",
+		datatype, address, (*((unsigned short *)p)));
+#endif
 	} else if (datatype == op_dword) {
 		value->dword = (*((unsigned int *)p));
+#ifdef VERBOSE
+		LOG(stdout, "re_opdvalue/get_memval_from_coredump: get %d bytes from memory ( %#x ), value is %#x\n",
+		datatype, address, (*((unsigned int *)p)));
+#endif
+	} else if (datatype == op_qword){
+		value->qword = (*((uint64_t *)p));
+#ifdef VERBOSE
+		LOG(stdout, "re_opdvalue/get_memval_from_coredump: get %d bytes from memory ( %#x ), value is %#lx\n",
+		datatype, address, (*((uint64_t*)p)));
+#endif
 	} else {
 		LOG(stderr, "LOG: Error data type\n");
 		assert(0);

@@ -89,12 +89,13 @@ enum u_type{
 	Index
 };
 
+// modified data types to number of bits for clarity 
 typedef union valset_struct{
-	unsigned char byte; 	 /* 1-byte */
-	unsigned short word; 	 /* 2-byte */
-	unsigned long dword; 	 /* 4-byte */
-	unsigned long qword[2];	 /* 8-byte */
-	unsigned long dqword[4]; /* 16-byte*/
+	uint8_t byte; 	 /* 1-byte */
+	uint16_t word; 	 /* 2-byte */
+	uint32_t dword; 	 /* 4-byte */
+	uint64_t qword;	 /* 8-byte */
+	uint64_t dqword[2]; /* 16-byte*/
 }valset_u; 
 
 #ifdef VSA

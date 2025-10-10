@@ -131,6 +131,125 @@ void ldm_handler(cs_insn* insn, arm_ops_parser* parser, uint8_t* nsrc, uint8_t* 
     *nsrc = src_num;
     *ndst = dst_num;
 }
+
+void vst1_handler(cs_insn* insn, arm_ops_parser* parser, uint8_t* nsrc, uint8_t* ndst){
+    // eg vst1.8 {d4, d5, d6, d7}, [r12:0x40]! (colon is just for alignment)
+    uint8_t src_num = 0;
+    uint8_t dst_num = 0;
+    cs_arm_op* op = NULL;
+    cs_arm_op* op_wb = NULL;
+    uint8_t total_ops = (insn->detail->arm.op_count) << 1;
+    mem_access_type mem_ac_type;
+    parser->op_num = 0;
+    for (uint8_t i = 0; i < insn->detail->arm.op_count; i++) {
+        op = &(insn->detail->arm.operands[i]);
+        // LOG(stdout, "Operand %d: reg %d\n", i, op->reg);
+        assert(op->type == ARM_OP_REG);
+        if (i == insn->detail->arm.op_count - 1) {
+            // last reg is the base address to store at
+            if (insn->detail->writeback) {
+                // e.g. vst1.8 {d4, d5, d6, d7}, [r12:0x40]!
+                op_wb = &(insn->detail->arm.operands[total_ops]);
+                total_ops++;
+                op_wb->type = ARM_OP_REG;
+                op_wb->reg = op->reg;
+                op_wb->access = CS_AC_WRITE;
+                parser->op[parser->op_num] = op_wb;
+                parser->op_usage[parser->op_num] = op_writeback;
+                parser->op_num++; // writeback register placed at start
+                dst_num++;
+            }
+            // need to generate addtional use here for r12?
+
+        } else {
+            // reglist
+            // generate implicit memory write
+            parser->op[parser->op_num] = create_arm_opd();
+            parser->op[parser->op_num]->type = ARM_OP_MEM;
+            parser->op[parser->op_num]->access = CS_AC_WRITE;
+            parser->op[parser->op_num]->mem.base = insn->detail->arm.operands[insn->detail->arm.op_count-1].reg;
+
+            // d0 reg has value of 20, max should be d31 so 20+31=51, d0 has width of 8bytes
+            if((op->reg >=ARM_REG_D0) && (op->reg <=ARM_REG_D31)){
+                parser->op[parser->op_num]->mem.disp = i << 3;
+            }
+            // have yet to handle Q and V registers
+            else{
+                LOG(stdout, "Have yet to handle Q and V registers in vst1 handler\n");
+            }
+            parser->op_usage[parser->op_num] = op_dst;
+            parser->op_num++;
+            dst_num++;
+            // generate normal reg use
+            parser->op[parser->op_num] = op;
+            parser->op_usage[parser->op_num] = op_src;
+            parser->op_num++;
+            src_num++;
+        }
+    }
+    *nsrc = src_num;
+    *ndst = dst_num;
+}
+
+void vld1_handler(cs_insn* insn, arm_ops_parser* parser, uint8_t* nsrc, uint8_t* ndst){
+    // eg vld1.8 {d4, d5, d6, d7}, [r1]!
+    uint8_t src_num = 0;
+    uint8_t dst_num = 0;
+    cs_arm_op* op = NULL;
+    cs_arm_op* op_wb = NULL;
+    uint8_t total_ops = (insn->detail->arm.op_count) << 1;
+    mem_access_type mem_ac_type;
+    parser->op_num = 0;
+    for (uint8_t i = 0; i < insn->detail->arm.op_count; i++) {
+        op = &(insn->detail->arm.operands[i]);
+        // LOG(stdout, "Operand %d: reg %d\n", i, op->reg);
+        assert(op->type == ARM_OP_REG);
+        if (i == insn->detail->arm.op_count - 1) {
+            // last reg is the base address to store at
+            if (insn->detail->writeback) {
+                // e.g. vst1.8 {d4, d5, d6, d7}, [r12:0x40]!
+                op_wb = &(insn->detail->arm.operands[total_ops]);
+                total_ops++;
+                op_wb->type = ARM_OP_REG;
+                op_wb->reg = op->reg;
+                op_wb->access = CS_AC_WRITE;
+                parser->op[parser->op_num] = op_wb;
+                parser->op_usage[parser->op_num] = op_writeback;
+                parser->op_num++; // writeback register placed at start
+                dst_num++;
+            }
+            
+            
+        } else {
+            // reglist
+            // generate implicit memory read
+            parser->op[parser->op_num] = create_arm_opd();
+            parser->op[parser->op_num]->type = ARM_OP_MEM;
+            parser->op[parser->op_num]->access = CS_AC_READ;
+            parser->op[parser->op_num]->mem.base = insn->detail->arm.operands[insn->detail->arm.op_count-1].reg;
+
+            // d0 reg has value of 20, max should be d31 so 20+31=51, d0 has width of 8bytes
+            if(op->reg >=ARM_REG_D0 && op->reg <=ARM_REG_D31){
+                parser->op[parser->op_num]->mem.disp = i << 3;
+            }
+            // have yet to handle Q and V registers
+            else{
+                LOG(stdout, "Have yet to handle Q and V registers in vld1 handler\n");
+            }
+            parser->op_usage[parser->op_num] = op_src;
+            parser->op_num++;
+            src_num++;
+            // generate normal reg def
+            parser->op[parser->op_num] = op;
+            parser->op_usage[parser->op_num] = op_dst;
+            parser->op_num++;
+            dst_num++;
+        }
+    }
+    *nsrc = src_num;
+    *ndst = dst_num;
+}
+
 #ifdef FRCA
 void general_handler(re_list_t *instnode) {
     cs_insn *inst;
@@ -159,6 +278,12 @@ void general_handler(re_list_t *instnode) {
         break;
     case ARM_INS_LDMDB:
         ldm_handler(inst, &parser, &nsrc, &ndst, false);
+        break;
+    case ARM_INS_VST1:
+        vst1_handler(inst, &parser, &nsrc, &ndst);
+        break;
+    case ARM_INS_VLD1:
+        vld1_handler(inst, &parser, &nsrc, &ndst);
         break;
     default:
         arm_parse_ops(inst, &parser, &nsrc, &ndst);
